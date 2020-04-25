@@ -13,3 +13,4 @@ config.js
 firebase-debug.log
 
 ngrok
+.runtimeconfig.json

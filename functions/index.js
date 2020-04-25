@@ -6,15 +6,14 @@ const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
 const { getRandomMessage } = require('./strings')
 
-const bot_token = "xoxb-1072067935878-1072261206806-YfbxRhub0P3yLvPlX9CdvNJV"
 const expressReceiver = new ExpressReceiver({
-    signingSecret: "fac4486e1ea0f0539ed46746296d17e8",
+    signingSecret: config.slack.signing_secret,
     endpoints: '/events'
 });
 
 const app = new App({
     receiver: expressReceiver,
-    token: "xoxb-1072067935878-1072261206806-YfbxRhub0P3yLvPlX9CdvNJV"
+    token: config.slack.bot_token
 });
 
 // Global error handler
@@ -29,7 +28,6 @@ app.command('/echo', async ({ command, ack, say }) => {
 });
 
 app.event("app_home_opened", async ({ context, event, say }) => {
-  console.log(`Home Opened: token: ${bot_token}`);
   try {
     console.log('app_home_opened')
     /* view.publish is the method that your app uses to push a view to the Home tab */
@@ -46,7 +44,7 @@ app.event("app_home_opened", async ({ context, event, say }) => {
     });
 
     broadcastMessage(await app.client.conversations.members({
-      token: bot_token,
+      token: config.slack.bot_token,
       channel: "C011W20B0ET"
     }))
   }
@@ -60,7 +58,7 @@ function broadcastMessage(usersList, message) {
     try {
       console.log(mb)
       const result = app.client.chat.postEphemeral({
-        token: bot_token,
+        token: config.slack.bot_token,
         channel: "yappy",
         user: mb.id || mb,
         text: getRandomMessage(),
