@@ -5,6 +5,7 @@ const config = functions.config();
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
 const { getRandomMessage } = require('./strings')
+const { performGrouping } = require('./utils')
 
 const expressReceiver = new ExpressReceiver({
     signingSecret: config.slack.signing_secret,
@@ -43,31 +44,59 @@ app.event("app_home_opened", async ({ context, event, say }) => {
       view: HomeView
     });
 
-    broadcastMessage(await app.client.conversations.members({
-      token: config.slack.bot_token,
-      channel: "C011W20B0ET"
-    }))
+    const userPool = await getSubscribedUsers()
+    const groups = performGrouping(userPool)
+    for (let i = 0; i < groups.length; i++){
+      broadcastMessage(groups[i], getRandomMessage())
+    }
   }
   catch (error) {
     console.error(error);
   }
 });
 
-function broadcastMessage(usersList, message) {
-  usersList.members.map(mb => {
+
+async function getSubscribedUsers() {
+  
+  let usersList = await app.client.conversations.members({
+    token: config.slack.bot_token,
+    channel: "C011W20B0ET"
+  })
+
+  let users = await usersList.members.map(async member => await app.client.users.info({
+    token: config.slack.bot_token,
+    user: member
+  }))
+
+  let list = []
+
+  for (let userId of usersList.members){
+    let user = await app.client.users.info({
+      token: config.slack.bot_token,
+      user: userId
+    })
+    list.push(user)
+    // console.log(user) 
+  }
+
+  return list
+}
+
+function broadcastMessage(usersList, message){
+  usersList.map(mb => {
     try {
-      console.log(mb)
       const result = app.client.chat.postEphemeral({
         token: config.slack.bot_token,
-        channel: "yappy",
-        user: mb.id || mb,
-        text: getRandomMessage(),
+        channel: "C011W20B0ET",
+        user: mb.user.id || mb.id || mb,
+        text: message,
       });
     }
     catch (error) {
       console.error(error);
     }
   })
+
 }
 
 // https://{your domain}.cloudfunctions.net/slack/events
