@@ -1,26 +1,19 @@
-const MAX_USERS_PER_GROUP = 4
+module.exports.splitToChunks = (array, chunk = 3) => {
+  var i,j,temparray;
+  var groups = []
+  for (i = 0,j = array.length; i<j; i += chunk) {
+      groups.push(array.slice(i,i + chunk));
+  }
+  if(groups.length < 2){
+    return groups;
+  }
 
-module.exports.performGrouping = (usersList) => {
-    let groups = []
+  let lastGroup = groups.pop()
+  if (lastGroup.length == 1){
+    groups[0] = [...groups[0], lastGroup[0]];
+  } else {
+    groups.push(lastGroup)
+  }
 
-    let index = 0
-    if (usersList.length) groups.push([])
-
-    while(usersList.length){
-        if (groups[index].length < MAX_USERS_PER_GROUP){
-            groups[index].push(usersList.pop())
-        }
-        else{
-            index++
-            groups.push([])
-        }
-    }
-
-    groups.forEach(group => {
-        console.log("---------")
-        group.forEach(user => {
-            console.log(user.user.name)
-        })
-    })
-    return groups
+  return groups
 }

@@ -1,4 +1,4 @@
-module.exports.MessageHeadsup = (randomMessage, meeting_id) => [
+module.exports.MessageHeadsup = (randomMessage, meeting_request_id) => [
     {
         "type": "section",
         "text": {
@@ -14,10 +14,10 @@ module.exports.MessageHeadsup = (randomMessage, meeting_id) => [
                 "text": {
                     "type": "plain_text",
                     "emoji": true,
-                    "text": "Approve"
+                    "text": "Sure, I'll take a break"
                 },
                 "style": "primary",
-                "value": meeting_id,
+                "value": meeting_request_id,
                 "action_id": "accept_yappy_session"
             },
             {
@@ -25,7 +25,7 @@ module.exports.MessageHeadsup = (randomMessage, meeting_id) => [
                 "text": {
                     "type": "plain_text",
                     "emoji": true,
-                    "text": "Deny"
+                    "text": "Too busy working"
                 },
                 "style": "danger",
                 "value": "click_me_123"
