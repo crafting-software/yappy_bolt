@@ -1,4 +1,4 @@
-module.exports.MessageHeadsup = (randomMessage) => [
+module.exports.MessageHeadsup = (randomMessage, meeting_id) => [
     {
         "type": "section",
         "text": {
@@ -17,6 +17,7 @@ module.exports.MessageHeadsup = (randomMessage) => [
                     "text": "Approve"
                 },
                 "style": "primary",
+                "value": meeting_id,
                 "action_id": "accept_yappy_session"
             },
             {

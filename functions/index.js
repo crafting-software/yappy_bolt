@@ -3,6 +3,7 @@ const functions = require('firebase-functions');
 const admin = require("firebase-admin");
 const rp = require("request-promise");
 const config = functions.config();
+const { v4 } = require('uuid');
 
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
@@ -56,10 +57,11 @@ app.event("app_home_opened", async ({ context, event, say }) => {
 app.action('accept_yappy_session', async ({ ack, say, context, body, respond }) => {
   // Acknowledge action request
   console.log("Yapp accepted!")
-  console.log(body.user)
+  // console.log(body.user)
+  console.log(body)
   await ack();
   // await say(`${body.user.username} accepted the challenge.`);
-  // await respond("Great, your session will start soon. I'll let you know.");
+  await respond("Great, your session will start soon. I'll give you a ping.");
 });
 
 async function sendMessagesToWorkspaces(){
@@ -69,40 +71,47 @@ async function sendMessagesToWorkspaces(){
 
   var db = admin.database();
   var ref = db.ref("installations");
-  let snapshot = await ref.once("value").val();
-  console.log(snapshot)
-  // let bla = await snapshot.forEach(async data => {
-  //   let workspace = data.val();
-  //
-  //   // let users = getSubscribedUsers(workspace);
-  //   let users = await app.client.conversations.members({
-  //     token: workspace.token,
-  //     channel: workspace.webhook.channel_id
-  //   })
-  //   console.log(users);
-  // })
+  let snapshot = await ref.once("value", async function(data){
+    let workspaces = data.val();
+    for (let [key, workspace] of Object.entries(workspaces)) {
+      console.log("Getting users for ", workspace.team.name)
+      let users = await getSubscribedUsers(workspace);
+      // console.log(users)
+
+      for(let user of users){
+        const result = app.client.chat.postEphemeral({
+          token: workspace.token,
+          channel: workspace.webhook.channel_id,
+          user: user.user.id,
+          text: "Care to join a yappy meeting?",
+          blocks: MessageHeadsup("This is the Blocks View")
+        });
+      }
+    }
+  })
+
   // snapshot.forEach(async function(data) {
   //   let workspace = data.val();
-  //
-  //   // let users = getSubscribedUsers(workspace);
-  //   let users = await app.client.conversations.members({
-  //     token: workspace.token,
-  //     channel: workspace.webhook.channel_id
-  //   })
-  //   // .then(users => {
-  //   //   console.log(usersList)
-  //   // })
-  //
-  //   console.log(users);
-  //
-  //   console.log(`Sending message to ${workspace.team.name} -> ${workspace.webhook.channel}`);
-  //   // const result = app.client.chat.postEphemeral({
-  //   //   token: workspace.token,
-  //   //   channel: workspace.webhook.channel_id,
-  //   //   user: workspace.bot_user_id,
-  //   //   text: "Care to join a yappy meeting?",
-  //   //   blocks: MessageHeadsup("This is the Blocks View")
-  //   // });
+
+    // let users = getSubscribedUsers(workspace);
+    // let users = await app.client.conversations.members({
+    //   token: workspace.token,
+    //   channel: workspace.webhook.channel_id
+    // })
+    // .then(users => {
+    //   console.log(usersList)
+    // })
+
+    // console.log(users);
+
+    // console.log(`Sending message to ${workspace.team.name} -> ${workspace.webhook.channel}`);
+    // const result = app.client.chat.postEphemeral({
+    //   token: workspace.token,
+    //   channel: workspace.webhook.channel_id,
+    //   user: workspace.bot_user_id,
+    //   text: "Care to join a yappy meeting?",
+    //   blocks: MessageHeadsup("This is the Blocks View")
+    // });
   //   console.log(`Sent message to ${workspace.team.name} -> ${workspace.webhook.channel}`);
   // });
 }
@@ -112,25 +121,16 @@ async function getSubscribedUsers(workspace) {
     token: workspace.token,
     channel: workspace.webhook.channel_id
   })
-  console.log("Retrieved users list for:", workspace.team.name)
+  console.log("Retrieved users list for:", workspace)
   console.log(usersList)
 
-  let users = await usersList.members.map(async member => await app.client.users.info({
+  let promises = usersList.members.map(async member => await app.client.users.info({
     token: workspace.token,
     user: member
   }))
 
-  let list = []
-
-  for (let userId of usersList.members){
-    let user = await app.client.users.info({
-      token: workspace.token,
-      user: userId
-    })
-    list.push(user)
-  }
-
-  return list
+  let users = await Promise.all(promises)
+  return users
 }
 
 /*
@@ -177,7 +177,7 @@ exports.oauth = functions.https.onRequest(async (request, response) => {
       code: request.query.code,
       client_id: functions.config().slack.client_id,
       client_secret: functions.config().slack.client_secret,
-      redirect_uri: "https://5af759f7.ngrok.io/yappy-cd44b/us-central1/oauth"
+      redirect_uri: "https://01cd4179.ngrok.io/yappy-cd44b/us-central1/oauth"
     }
   };
 
