@@ -1,1 +1,30 @@
-{}
+{
+  "hosting": {
+    "public": "static",
+    "rewrites": [
+      {
+         "source": "/oauth",
+         "function": "oauth"
+      }
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "database": {
+      "port": 9000
+    },
+    "pubsub": {
+      "port": 8085
+    }
+  }
+}
