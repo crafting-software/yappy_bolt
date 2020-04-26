@@ -4,6 +4,8 @@ const config = functions.config();
 
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
+const { MessageHeadsup } = require('./view/message_headsup')
+const { JoinMessage } = require('./view/join_message')
 const { getRandomMessage } = require('./strings')
 const { performGrouping } = require('./utils')
 
@@ -45,10 +47,11 @@ app.event("app_home_opened", async ({ context, event, say }) => {
     });
 
     const userPool = await getSubscribedUsers()
-    const groups = performGrouping(userPool)
-    for (let i = 0; i < groups.length; i++){
-      broadcastMessage(groups[i], getRandomMessage())
-    }
+    prepareSession(userPool)
+    // const groups = performGrouping(userPool)
+    // for (let i = 0; i < groups.length; i++){
+    //   broadcastMessage(groups[i], getRandomMessage())
+    // }
   }
   catch (error) {
     console.error(error);
@@ -82,7 +85,28 @@ async function getSubscribedUsers() {
   return list
 }
 
-function broadcastMessage(usersList, message){
+async function prepareSession(usersList){
+  const TIMER = 30000 //30s
+  
+  const randomMsg = getRandomMessage()
+  broadcastMessage(usersList, randomMsg, MessageHeadsup(randomMsg))
+  // console.log('headsup msg broadcasted')
+  // console.log(JoinMessage(usersList))
+  await setTimeout( () => {
+    console.log('test len',usersList)
+    const groups = performGrouping(usersList)
+    // console.log(groups[0])
+    // console.log(JoinMessage(usersList))
+    // console.log(x[2])
+    for (let i = 0; i < groups.length; i++){
+      broadcastMessage(groups[i], "Your 10 minutes yappin time starts now. Don’t hold back!", JoinMessage(usersList))
+    }
+  }, TIMER)
+ 
+  console.log('asdasdasdasdadsdaterwsagsdfjherfsdfawregsdadasa')
+}
+
+function broadcastMessage(usersList, message, view){
   usersList.map(mb => {
     try {
       const result = app.client.chat.postEphemeral({
@@ -90,6 +114,7 @@ function broadcastMessage(usersList, message){
         channel: "C011W20B0ET",
         user: mb.user.id || mb.id || mb,
         text: message,
+        blocks: view
       });
     }
     catch (error) {
