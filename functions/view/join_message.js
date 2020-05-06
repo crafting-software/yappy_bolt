@@ -1,10 +1,10 @@
-module.exports.JoinMessage = (meeting_url) => {
+module.exports.JoinMessage = (meeting_url, message = "") => {
   return [
     {
         "type": "section",
         "text": {
   				"type": "mrkdwn",
-  				"text": `Don't hold back. Join others to start yapping.`
+  				"text": message.length ? `*${message}*` : ' '
   			}
     },
     {
@@ -32,6 +32,7 @@ module.exports.JoinMessage = (meeting_url) => {
                 },
                 "style": "primary",
                 "url": meeting_url,
+                "action_id": "join_yappy_meeting"
             }
         ]
     }

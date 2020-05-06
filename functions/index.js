@@ -12,6 +12,7 @@ const { getRandomMessage } = require('./strings')
 const { JoinMessage } = require('./view/join_message')
 const { splitToChunks } = require('./utils')
 const { MessageHeadsup } = require('./view/message_heads_up')
+const { SessionListMessage } = require('./view/session_list')
 const { GroupManager } = require('./group_manager')
 
 const expressReceiver = new ExpressReceiver({
@@ -28,7 +29,7 @@ var serviceAccount = require("./yappy_service_account.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://yappy-cd44b.firebaseio.com"
+  databaseURL: "https://yappy-79985.firebaseio.com"
 });
 
 // Global error handler
@@ -52,16 +53,31 @@ app.event("app_home_opened", async ({ context, event, say }) => {
 });
 
 app.action('accept_yappy_session', async ({ ack, say, context, body, respond }) => {
+  await ack();
   console.log(`Yapp accepted by ${body.user.name}`);
   let user_id = body.user.id;
   let meeting_request_id = body.actions[0].value;
-  var usersRef = admin.database()
-    .ref(`sessions/${body.user.team_id}/${meeting_request_id}`)
-    .push(body.user);
+  var usersRef = await admin.database()
+    .ref(`sessions/${body.user.team_id}/${meeting_request_id}/${body.user.id}`)
+    .set('accepted');
 
-  await ack();
   await respond("Great, your session will start soon. I'll give you a ping.");
 });
+
+app.action('decline_yappy_session', async ({ ack, say, context, body, respond }) => {
+  await ack();
+  console.log(`Yapp declined by ${body.user.name}`);
+  let meeting_request_id = body.actions[0].value;
+  var usersRef = await admin.database()
+    .ref(`sessions/${body.user.team_id}/${meeting_request_id}/${body.user.id}`)
+    .set('declined');
+
+  await respond('If you change your mind, I\'ll show you the sessions you can join.');
+});
+
+app.action('join_yappy_meeting', async ({ack}) => {
+  await ack()
+})
 
 async function sendMeetingLinksToWorkspace(workspace, meeting_request_id) {
   console.log("Users who accepted the call from team ", workspace.team.name)
@@ -69,29 +85,42 @@ async function sendMeetingLinksToWorkspace(workspace, meeting_request_id) {
   var db = admin.database();
   var ref = db.ref(`sessions/${workspace.team.id}/${meeting_request_id}`);
   let snapshot = await ref.once("value", async function(data){
-    let users = data.val();
+    const users = data.val()
 
-    let cleanUsers = Object.entries(users).map(entry => {
-      return entry[1];
-    });
+    if (users){
+      const accepted = Object.entries(users).filter(user => user[1] == 'accepted')
+      const maybe = Object.entries(users).filter(user => user[1] == 'declined')
 
-    let groups = splitToChunks(cleanUsers, 2);
+      let groups = splitToChunks(accepted, 2);
 
-    console.log("Sending meeting links to groups...")
+      console.log("Sending meeting links to groups...")
+      const ongoingMeetings = []
 
-    for (let group of groups) {
-      let meeting_group_id = v4().replace(/-/g,"");
-      let meeting_url = `https://8x8.vc/440607796/${meeting_group_id}`
-      for(let user of group) {
-        const result = app.client.chat.postEphemeral({
-          token: workspace.token,
-          channel: workspace.webhook.channel_id,
-          user: user.id,
-          text: "Time to join your yapping meeting.",
-          blocks: JoinMessage(meeting_url)
-        });
+      for (let group of groups) {
+        let meeting_group_id = v4().replace(/-/g,"");
+        let meeting_url = `https://8x8.vc/440607796/${meeting_group_id}`
+        ongoingMeetings.push(meeting_url)
+
+        for(let user of group) {
+          const result = app.client.chat.postMessage({
+            token: workspace.token,
+            channel: user[0],
+            text: "Time to join your yapping meeting.",
+            blocks: JoinMessage(meeting_url, "Don't hold back. Join others to start yapping.")
+          });
+        }
+
+        for (const user of maybe) {
+          const result = app.client.chat.postMessage({
+            token: workspace.token,
+            text: `In case you changed your mind, there are some sessions in progress you can join`,
+            channel: user[0],
+            blocks: SessionListMessage(ongoingMeetings) 
+          })
+        }
       }
     }
+    else console.log("Nobody")
   })
 }
 
@@ -107,10 +136,9 @@ async function sendMessagesToWorkspaces(){
 
       for(let user of users){
         let inviteMessage = getRandomMessage();
-        const result = app.client.chat.postEphemeral({
+        const result = app.client.chat.postMessage({
           token: workspace.token,
-          channel: workspace.webhook.channel_id,
-          user: user.user.id,
+          channel: user.user.id,
           text: inviteMessage,
           blocks: MessageHeadsup(inviteMessage, meeting_request_id)
         });
@@ -118,7 +146,7 @@ async function sendMessagesToWorkspaces(){
 
       setTimeout(function(){
         sendMeetingLinksToWorkspace(workspace, meeting_request_id);
-      }, 60000 * 10)
+      }, 60000 * 5)
     }
   })
 }
@@ -135,8 +163,23 @@ async function getSubscribedUsers(workspace) {
   }))
 
   let users = await Promise.all(promises)
+    .then(users => users.map(async user => {
+      user.status = await app.client.users.getPresence({
+        token: workspace.token,
+        user: user.user.id
+      })
+      return user
+    }
+      
+  )).then(users => Promise.all(users))
+
   console.log("Retrieved users list for:", workspace)
-  return users
+
+  const onlineUsers = users.filter(user => user.status.presence == "active")
+
+  console.log(`Active users in ${workspace.team.name} : ${onlineUsers.length}`)
+
+  return onlineUsers
 }
 
 /*
@@ -144,10 +187,13 @@ async function getSubscribedUsers(workspace) {
 */
 
 exports.slack = functions.https.onRequest(async (req, res) => {
+  console.log('started server')
   expressReceiver.app(req, res);
 });
 
-exports.scheduledFunction = functions.pubsub.schedule('5 12 * * *').timeZone('Europe/Bucharest').onRun((context) => {
+exports.scheduledFunction = functions.runWith({
+  timeoutSeconds: 540
+}).pubsub.schedule('5 12 * * *').timeZone('Europe/Bucharest').onRun((context) => {
   sendMessagesToWorkspaces();
   return null;
 });
@@ -181,14 +227,14 @@ exports.oauth = functions.https.onRequest(async (request, response) => {
       code: request.query.code,
       client_id: functions.config().slack.client_id,
       client_secret: functions.config().slack.client_secret,
-      redirect_uri: "https://us-central1-yappy-cd44b.cloudfunctions.net/oauth"
+      redirect_uri: "https://us-central1-yappy-79985.cloudfunctions.net/oauth"
     }
   };
 
   const result = await rp(options);
   if (!result.ok) {
     console.error("The request was not ok: " + JSON.stringify(result));
-    return response.header("Location", 'https://yappy-cd44b.web.app').send(302);
+    return response.header("Location", 'https://yappy-79985.web.app').send(302);
   }
 
   console.log("OAuth Success!")
@@ -209,5 +255,5 @@ exports.oauth = functions.https.onRequest(async (request, response) => {
   });
 
   console.log("A new workspace installed Yappy!")
-  response.header("Location", 'https://yappy-cd44b.web.app/success.html').send(302);
+  response.header("Location", 'https://yappy-79985.web.app/success.html').send(302);
 });

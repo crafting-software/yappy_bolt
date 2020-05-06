@@ -28,7 +28,8 @@ module.exports.MessageHeadsup = (randomMessage, meeting_request_id) => [
                     "text": "Too busy working"
                 },
                 "style": "danger",
-                "value": "click_me_123"
+                "value": meeting_request_id,
+                "action_id": "decline_yappy_session"
             }
         ]
     }

@@ -3,8 +3,8 @@
     "public": "static",
     "rewrites": [
       {
-         "source": "/oauth",
-         "function": "oauth"
+        "source": "/oauth",
+        "function": "oauth"
       }
     ],
     "ignore": [
@@ -26,5 +26,8 @@
     "pubsub": {
       "port": 8085
     }
+  },
+  "database": {
+    "rules": "database.rules.json"
   }
 }
