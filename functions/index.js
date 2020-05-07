@@ -43,36 +43,72 @@ app.command('/echo-from-firebase', async ({ command, ack, say }) => {
   await say(`${command.text}`);
 });
 
-app.event("app_home_opened", async ({ context, event, say }) => {
-  console.log('app_home_opened')
+app.event("app_home_opened", async ({ context, event, say, body }) => {
+  const workspaceId = body.team_id
+  const ref = await admin.database()
+    .ref(`users/${workspaceId}/${event.user}`)
+    await ref.once("value", async function(data){
+      const user = data.val()
+
+      const result = await app.client.views.publish({
+        token: context.botToken,
+        user_id: event.user,
+        view: HomeView(user)
+      });
+    })
+});
+
+app.action('yappy_opt_in', async ({ack, say, context, body}) => {
+  await ack()
+  const workspaceId = body.team.id
+  const userId = body.user.id
+
+  await admin.database()
+    .ref(`users/${workspaceId}/${userId}`)
+    .set(body.user.username)
+
   const result = await app.client.views.publish({
     token: context.botToken,
-    user_id: event.user,
-    view: HomeView
-  });
+    user_id: userId,
+    view: HomeView(userId)
+  })
+});
+
+app.action('yappy_opt_out', async ({ack, say, context, body}) => {
+  await ack()
+  const workspaceId = body.team.id
+  const userId = body.user.id
+
+  await admin.database()
+    .ref(`users/${workspaceId}/${userId}`)
+    .remove()
+
+  const result = await app.client.views.publish({
+    token: context.botToken,
+    user_id: userId,
+    view: HomeView(null)
+  })
 });
 
 app.action('accept_yappy_session', async ({ ack, say, context, body, respond }) => {
   await ack();
+  await respond("Great, your session will start soon. I'll give you a ping.");
   console.log(`Yapp accepted by ${body.user.name}`);
   let user_id = body.user.id;
   let meeting_request_id = body.actions[0].value;
   var usersRef = await admin.database()
     .ref(`sessions/${body.user.team_id}/${meeting_request_id}/${body.user.id}`)
     .set('accepted');
-
-  await respond("Great, your session will start soon. I'll give you a ping.");
 });
 
 app.action('decline_yappy_session', async ({ ack, say, context, body, respond }) => {
   await ack();
+  await respond('If you change your mind, I\'ll show you the sessions you can join.');
   console.log(`Yapp declined by ${body.user.name}`);
   let meeting_request_id = body.actions[0].value;
   var usersRef = await admin.database()
     .ref(`sessions/${body.user.team_id}/${meeting_request_id}/${body.user.id}`)
     .set('declined');
-
-  await respond('If you change your mind, I\'ll show you the sessions you can join.');
 });
 
 app.action('join_yappy_meeting', async ({ack}) => {
@@ -138,7 +174,7 @@ async function sendMessagesToWorkspaces(){
         let inviteMessage = getRandomMessage();
         const result = app.client.chat.postMessage({
           token: workspace.token,
-          channel: user.user.id,
+          channel: user,
           text: inviteMessage,
           blocks: MessageHeadsup(inviteMessage, meeting_request_id)
         });
@@ -156,30 +192,38 @@ async function getSubscribedUsers(workspace) {
     token: workspace.token,
     channel: workspace.webhook.channel_id
   })
+  let usersRef = await admin.database()
+    .ref(`users/${workspace.team.id}`)
 
-  let promises = usersList.members.map(async member => await app.client.users.info({
-    token: workspace.token,
-    user: member
-  }))
+  const onlineUsers = await usersRef.once("value", async function(data){
+    const snapshot = data.val()
 
-  let users = await Promise.all(promises)
-    .then(users => users.map(async user => {
-      user.status = await app.client.users.getPresence({
-        token: workspace.token,
-        user: user.user.id
-      })
-      return user
-    }
-      
-  )).then(users => Promise.all(users))
+    let promises = Object.entries(snapshot).map(async member => await app.client.users.info({
+      token: workspace.token,
+      user: member[0]
+    }))
+
+    let users = await Promise.all(promises)
+      .then(users => users.map(async user => {
+        user.status = await app.client.users.getPresence({
+          token: workspace.token,
+          user: user.user.id
+        })
+        return user
+      }))
+      .then(users => Promise.all(users))
+
+      return users.filter(user => user.status.presence == "active")
+  })
 
   console.log("Retrieved users list for:", workspace)
+  console.log(onlineUsers.val())
 
-  const onlineUsers = users.filter(user => user.status.presence == "active")
+  const usersArray = Object.entries(onlineUsers.val()).map(user => user[0])
 
-  console.log(`Active users in ${workspace.team.name} : ${onlineUsers.length}`)
+  console.log(`Active users in ${workspace.team.name} : ${usersArray.length}`)
 
-  return onlineUsers
+  return usersArray
 }
 
 /*
