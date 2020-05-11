@@ -1,4 +1,8 @@
-exports.HomeView = (user) => {
+const admin = require("firebase-admin");
+const { NewSessionControls } = require('./components/new_sessions')
+const { ScheduledSessions } = require('./components/scheduled_sessions')
+
+exports.HomeView = async (user) => {
 
   const state = user
     ? {
@@ -14,6 +18,16 @@ exports.HomeView = (user) => {
       actionId: 'yappy_opt_in'
     }
 
+  let scheduledSessions
+
+  if (user) {
+    const scheduledSessionsRef = await admin.database()
+      .ref(`scheduled_sessions/${user.team_id}`)
+    const snapshot = await scheduledSessionsRef.once('value', async data => data)
+
+    scheduledSessions = Object.entries(snapshot.val() || {}).map(session => session[1])
+  }
+
   return {
     type: 'home',
     callback_id: 'home_view',
@@ -27,9 +41,11 @@ exports.HomeView = (user) => {
           "text": "*Yappy*"
         }
       },
-      {
-        "type": "divider"
-      },
+
+      ...ScheduledSessions(user, await scheduledSessions || []),
+      ...NewSessionControls(user),
+
+      //Opt in / out controls
       {
         "type": "section",
         "text": {

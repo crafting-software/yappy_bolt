@@ -4,15 +4,17 @@ const admin = require("firebase-admin");
 const rp = require("request-promise");
 const config = functions.config();
 const { v4 } = require('uuid');
+const moment = require('moment')
 
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
 const { getRandomMessage } = require('./strings')
 
 const { JoinMessage } = require('./view/join_message')
-const { splitToChunks } = require('./utils')
+const { splitToChunks, parseTime } = require('./utils')
 const { MessageHeadsup } = require('./view/message_heads_up')
 const { SessionListMessage } = require('./view/session_list')
+const { ScheduleMeetingModal } = require('./view/schedule_meeting_modal')
 const { GroupManager } = require('./group_manager')
 
 const expressReceiver = new ExpressReceiver({
@@ -43,19 +45,67 @@ app.command('/echo-from-firebase', async ({ command, ack, say }) => {
   await say(`${command.text}`);
 });
 
+app.view('yappy_submit_meeting', async ({ ack, body, view, context }) => {
+  await ack()
+
+  const userId = body.user.id
+  const workspaceId = body.team.id
+
+  const user = await app.client.users.info({
+    token: context.botToken,
+    user: userId
+  })
+
+  const time = view.state.values.yappy_time_input_block.yappy_time_input.value
+  const tz = user.user.tz
+  const tz_offset = user.user.tz_offset
+
+  const [hour, min] = parseTime(time)
+  if (typeof hour == 'number' && typeof min == 'number'){
+
+    const utcTime = moment.utc().hours(hour).minutes(min).subtract({seconds: tz_offset}).format('HH:mm')
+    const [initialHour, initialMin] = parseTime(view.blocks[0].element.initial_value) || []
+    let initialTime
+    if(typeof initialHour == 'number' && typeof initialMin == 'number') {
+      initialTime = moment.utc().hours(initialHour).minutes(initialMin).subtract({seconds: tz_offset}).format('HH:mm')
+    }
+
+    console.log(view.blocks[0].element.initial_value)
+
+    await admin.database()
+      .ref(`scheduled_sessions/${body.team.id}/${initialTime}`)
+      .remove()
+
+    await admin.database()
+    .ref(`scheduled_sessions/${body.team.id}/${utcTime}`)
+    .set({
+        tz: tz,
+        utc_time: utcTime,
+        tz_offset: tz_offset
+      })
+  }
+  
+  const result = await app.client.views.publish({
+    token: context.botToken,
+    user_id: userId,
+    view: await HomeView(user.user)
+  });
+  
+})
+
 app.event("app_home_opened", async ({ context, event, say, body }) => {
   const workspaceId = body.team_id
-  const ref = await admin.database()
-    .ref(`users/${workspaceId}/${event.user}`)
-    await ref.once("value", async function(data){
-      const user = data.val()
 
-      const result = await app.client.views.publish({
-        token: context.botToken,
-        user_id: event.user,
-        view: HomeView(user)
-      });
-    })
+  const user = await app.client.users.info({
+    token: context.botToken,
+    user: event.user
+  })
+
+  const result = await app.client.views.publish({
+    token: context.botToken,
+    user_id: event.user,
+    view: await HomeView(user.user)
+  });
 });
 
 app.action('yappy_opt_in', async ({ack, say, context, body}) => {
@@ -63,14 +113,19 @@ app.action('yappy_opt_in', async ({ack, say, context, body}) => {
   const workspaceId = body.team.id
   const userId = body.user.id
 
+  const user = await app.client.users.info({
+    token: context.botToken,
+    user: userId
+  })
+
   await admin.database()
     .ref(`users/${workspaceId}/${userId}`)
-    .set(body.user.username)
+    .set(user.user.name)
 
   const result = await app.client.views.publish({
     token: context.botToken,
     user_id: userId,
-    view: HomeView(userId)
+    view: await HomeView(user.user)
   })
 });
 
@@ -86,7 +141,7 @@ app.action('yappy_opt_out', async ({ack, say, context, body}) => {
   const result = await app.client.views.publish({
     token: context.botToken,
     user_id: userId,
-    view: HomeView(null)
+    view: await HomeView(null)
   })
 });
 
@@ -113,6 +168,78 @@ app.action('decline_yappy_session', async ({ ack, say, context, body, respond })
 
 app.action('join_yappy_meeting', async ({ack}) => {
   await ack()
+})
+
+app.action('yappy_admin_schedule_meeting', async ({ack, context, body}) => {
+  await ack()
+  await app.client.views.open({
+    token: context.botToken,
+    trigger_id: body.trigger_id,
+    view: ScheduleMeetingModal()
+  })
+})
+
+app.action('yappy_admin_menu', async ({ack,context, body}) => {
+  await ack()
+  const params = body.actions[0].selected_option.value.split('/')
+  const workspaceId = body.team.id
+  const userId = body.user.id
+
+  const [selectedOption, optionArg] = [params[0], params[1]]
+  switch (selectedOption) {
+    case "delete_meeting": {
+      await admin.database()
+        .ref(`scheduled_sessions/${workspaceId}/${optionArg}`)
+        .remove()
+      console.log(`Deleted session at ${optionArg}`)
+
+
+      const user = await app.client.users.info({
+        token: context.botToken,
+        user: userId
+      })
+
+      const result = await app.client.views.publish({
+        token: context.botToken,
+        user_id: userId,
+        view: await HomeView(user.user)
+      })
+      break
+    }
+
+    case "edit_meeting": {
+
+      const user = await app.client.users.info({
+          token: context.botToken,
+          user: userId
+      })
+
+      const [h, m] = optionArg.split(':')
+      const localTime = moment()
+        .clone()
+        .hours(parseInt(h))
+        .minutes(parseInt(m))
+        .add(user.user.tz_offset, 'seconds').format('HH:mm')
+
+      await app.client.views.open({
+        token: context.botToken,
+        trigger_id: body.trigger_id,
+        view: ScheduleMeetingModal({ value : localTime })
+      })
+
+      const result = await app.client.views.publish({
+        token: context.botToken,
+        user_id: userId,
+        view: await HomeView(user.user)
+      })
+      break
+    }
+  }
+})
+
+app.action('yappy_new_instant_meeting', async ({ack, context, body}) => {
+  await ack()
+  sendMessagesToWorkspaces(body.team.id)
 })
 
 async function sendMeetingLinksToWorkspace(workspace, meeting_request_id) {
@@ -160,16 +287,16 @@ async function sendMeetingLinksToWorkspace(workspace, meeting_request_id) {
   })
 }
 
-async function sendMessagesToWorkspaces(){
+async function sendMessagesToWorkspaces(workspaceId = null){
   var db = admin.database();
-  var ref = db.ref("installations");
+  var ref = db.ref(`installations${workspaceId? `/${workspaceId}` : ""}`);
   let snapshot = await ref.once("value", async function(data){
-    let workspaces = data.val();
+    let workspaces = workspaceId ? {workspace : data.val() } : data.val();
     for (let [key, workspace] of Object.entries(workspaces)) {
       console.log("Getting users for ", workspace.team.name)
       let meeting_request_id = v4();
       let users = await getSubscribedUsers(workspace);
-
+      console.log(workspaces)
       for(let user of users){
         let inviteMessage = getRandomMessage();
         const result = app.client.chat.postMessage({
@@ -188,10 +315,7 @@ async function sendMessagesToWorkspaces(){
 }
 
 async function getSubscribedUsers(workspace) {
-  let usersList = await app.client.conversations.members({
-    token: workspace.token,
-    channel: workspace.webhook.channel_id
-  })
+
   let usersRef = await admin.database()
     .ref(`users/${workspace.team.id}`)
 
@@ -236,10 +360,23 @@ exports.slack = functions.https.onRequest(async (req, res) => {
 });
 
 exports.scheduledFunction = functions.runWith({
-  timeoutSeconds: 540
-}).pubsub.schedule('5 12 * * *').timeZone('Europe/Bucharest').onRun((context) => {
-  sendMessagesToWorkspaces();
-  return null;
+  timeoutSeconds: 60
+}).pubsub.schedule('* * * * *').onRun(async context => {
+
+  
+  const utcTime = moment().clone().utc().format('HH:mm')
+  const ref = admin.database().ref('scheduled_sessions')
+  ref.once('value', async (data) => {
+    const workspaces = data.val()
+
+    for (const ws in workspaces){
+      for (const session in workspaces[ws]) {
+        if (session == utcTime){
+          sendMessagesToWorkspaces(ws)
+        }
+      }
+    }
+  })
 });
 
 exports.test = functions.https.onRequest(async (request, response) => {

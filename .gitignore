@@ -15,4 +15,5 @@ database-debug.log
 
 ngrok
 .runtimeconfig.json
+.firebase/
 yappy_service_account.json

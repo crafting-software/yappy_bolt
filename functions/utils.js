@@ -17,3 +17,9 @@ module.exports.splitToChunks = (array, chunk = 3) => {
 
   return groups
 }
+
+module.exports.parseTime = timeString => {
+  const validator = /^(2[0-3]|[01]?[0-9]):([0-5]?[0-9])$/gm
+  if (validator.test(timeString))
+    return timeString.split(':').map(unit => parseInt(unit))
+}
