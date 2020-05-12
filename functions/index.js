@@ -127,7 +127,7 @@ exports.scheduledFunction = functions.runWith({
     for (const ws in workspaces){
       for (const session in workspaces[ws]) {
         if (session == utcTime){
-          sendMessagesToWorkspaces(ws)
+          sendMessagesToWorkspaces(app, ws)
         }
       }
     }
