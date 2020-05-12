@@ -11,37 +11,42 @@ const { JoinMessage } = require('../view/join_message')
 const { MessageHeadsup } = require('../view/message_heads_up')
 const { SessionListMessage } = require('../view/session_list')
 
-const TIMEOUT = 60000 * 1
+const TIMEOUT = 60000 * 5
 
 async function sendMeetingLinksToWorkspace(app, workspace, meeting_request_id) {
     console.log("Users who accepted the call from team ", workspace.team.name)
 
     var db = admin.database();
     var ref = db.ref(`sessions/${workspace.team.id}/${meeting_request_id}`);
+    const allUsersRef = db.ref(`users/${workspace.team.id}`)
+    let allUsers
+    await allUsersRef.once('value', async data => {allUsers = data.val()})
+
     let snapshot = await ref.once("value", async function(data){
 
       const users = await Promise.all(
-        Object.entries(data.val()).map(async user => {
-          const data = await app.client.users.info({
-            token: workspace.token,
-            user: user[0]
-          })
-  
-          return {
-            name: data.user.profile.real_name,
-            id: user[0],
-            avatar: data.user.profile.image_48,
-            response: user[1]
-          }
-        })
+        Object.entries(allUsers)
+        .map(async user => await app.client.users.info({
+              token: workspace.token,
+              user: user[0]
+            }).then(user => {
+              return {
+                name: user.user.profile.real_name,
+                id: user.user.id,
+                avatar: user.user.profile.image_48,
+              }
+            }))
       ).then(users => {
+        const responses = data.val() || {}
+
         return {
-          accepted: users.filter(user => user.response == 'accepted'),
-          maybe: users.filter(user => user.response == 'declined')
+          accepted: users.filter(user => responses[user.id] == 'accepted'),
+          maybe: users.filter(user => !responses[user.id]),
+          declined: users.filter(user => responses[user.id] == 'declined'),
         }
       })
       console.log('users', users)
-      if (users){
+      if (users.accepted.length){
         let groups = splitToChunks(users.accepted, 2);
 
         console.log("Sending meeting links to groups...")
@@ -64,7 +69,7 @@ async function sendMeetingLinksToWorkspace(app, workspace, meeting_request_id) {
           for (const user of users.maybe) {
             const result = app.client.chat.postMessage({
               token: workspace.token,
-              text: `In case you changed your mind, there are some sessions in progress you can join`,
+              text: `There are some sessions in progress you can join`,
               channel: user.id,
               blocks: await SessionListMessage(ongoingMeetings) 
             })

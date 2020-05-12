@@ -126,7 +126,7 @@ module.exports.RSVP = {
 
   decline: async (app, {ack, say, context, body, respond }) => {
     await ack();
-    await respond('If you change your mind, I\'ll show you the sessions you can join.');
+    await respond('Okay, maybe next time.');
     console.log(`Yapp declined by ${body.user.name}`);
     let meeting_request_id = body.actions[0].value;
     var usersRef = await admin.database()
