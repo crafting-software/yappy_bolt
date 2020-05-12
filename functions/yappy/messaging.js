@@ -9,8 +9,9 @@ const { getSubscribedUsers } = require('./users')
 const { HomeView } = require('../view/app_home')
 const { JoinMessage } = require('../view/join_message')
 const { MessageHeadsup } = require('../view/message_heads_up')
+const { SessionListMessage } = require('../view/session_list')
 
-const TIMEOUT = 60000 * 5
+const TIMEOUT = 60000 * 1
 
 async function sendMeetingLinksToWorkspace(app, workspace, meeting_request_id) {
     console.log("Users who accepted the call from team ", workspace.team.name)
@@ -18,13 +19,30 @@ async function sendMeetingLinksToWorkspace(app, workspace, meeting_request_id) {
     var db = admin.database();
     var ref = db.ref(`sessions/${workspace.team.id}/${meeting_request_id}`);
     let snapshot = await ref.once("value", async function(data){
-      const users = data.val()
 
+      const users = await Promise.all(
+        Object.entries(data.val()).map(async user => {
+          const data = await app.client.users.info({
+            token: workspace.token,
+            user: user[0]
+          })
+  
+          return {
+            name: data.user.profile.real_name,
+            id: user[0],
+            avatar: data.user.profile.image_48,
+            response: user[1]
+          }
+        })
+      ).then(users => {
+        return {
+          accepted: users.filter(user => user.response == 'accepted'),
+          maybe: users.filter(user => user.response == 'declined')
+        }
+      })
+      console.log('users', users)
       if (users){
-        const accepted = Object.entries(users).filter(user => user[1] == 'accepted')
-        const maybe = Object.entries(users).filter(user => user[1] == 'declined')
-
-        let groups = splitToChunks(accepted, 2);
+        let groups = splitToChunks(users.accepted, 2);
 
         console.log("Sending meeting links to groups...")
         const ongoingMeetings = []
@@ -32,23 +50,23 @@ async function sendMeetingLinksToWorkspace(app, workspace, meeting_request_id) {
         for (let group of groups) {
           let meeting_group_id = v4().replace(/-/g,"");
           let meeting_url = `https://8x8.vc/440607796/${meeting_group_id}`
-          ongoingMeetings.push(meeting_url)
+          ongoingMeetings.push({url : meeting_url, users : group})
 
           for(let user of group) {
             const result = app.client.chat.postMessage({
               token: workspace.token,
-              channel: user[0],
+              channel: user.id,
               text: "Time to join your yapping meeting.",
-              blocks: JoinMessage(meeting_url, "Don't hold back. Join others to start yapping.")
+              blocks: JoinMessage(meeting_url, group, "Don't hold back. Join others to start yapping.")
             });
           }
 
-          for (const user of maybe) {
+          for (const user of users.maybe) {
             const result = app.client.chat.postMessage({
               token: workspace.token,
               text: `In case you changed your mind, there are some sessions in progress you can join`,
-              channel: user[0],
-              blocks: SessionListMessage(ongoingMeetings) 
+              channel: user.id,
+              blocks: await SessionListMessage(ongoingMeetings) 
             })
           }
         }
