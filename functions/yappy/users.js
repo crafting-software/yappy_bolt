@@ -5,33 +5,33 @@ module.exports.getSubscribedUsers = async function (app, workspace) {
     let usersRef = await admin.database()
       .ref(`users/${workspace.team.id}`)
   
-    const onlineUsers = await usersRef.once("value", async function(data){
-      const snapshot = data.val()
-  
-      let promises = Object.entries(snapshot).map(async member => await app.client.users.info({
+    const userPromises = await usersRef.once("value", async function(data){
+      return data.val()
+    })
+    .then(users => Object.entries(users.val())
+      .map(async user => await app.client.users.info({
         token: workspace.token,
-        user: member[0]
-      }))
-  
-      let users = await Promise.all(promises)
-        .then(users => users.map(async user => {
-          user.status = await app.client.users.getPresence({
+        user: user[0]
+      })))
+    
+    const onlineUsers = await Promise.all(userPromises)
+      .then(async users => {
+        for (let user of users) {
+          const status = await app.client.users.getPresence({
             token: workspace.token,
             user: user.user.id
           })
-          return user
-        }))
-        .then(users => Promise.all(users))
-  
-        return users.filter(user => user.status.presence == "active")
-    })
-  
+          user.user.status = status.presence
+        }
+        return users
+      })
+      .then(users => users
+        .map(user => user.user)
+        .filter(user => user.status == 'active'))
+    
     console.log("Retrieved users list for:", workspace)
-    console.log(onlineUsers.val())
   
-    const usersArray = Object.entries(onlineUsers.val()).map(user => user[0])
+    console.log(`Active users in ${workspace.team.name} : ${onlineUsers.length}`)
   
-    console.log(`Active users in ${workspace.team.name} : ${usersArray.length}`)
-  
-    return usersArray
+    return onlineUsers
   }

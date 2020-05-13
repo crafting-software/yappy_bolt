@@ -29,19 +29,23 @@ async function sendMeetingLinksToWorkspace(app, workspace, meeting_request_id) {
         .map(async user => await app.client.users.info({
               token: workspace.token,
               user: user[0]
-            }).then(user => {
+            }).then(async user => {
               return {
                 name: user.user.profile.real_name,
                 id: user.user.id,
                 avatar: user.user.profile.image_48,
+                status: await app.client.users.getPresence({
+                  token: workspace.token,
+                  user: user.user.id
+                }).then(status => status.presence)
               }
             }))
-      ).then(users => {
+      ).then(async users => {
         const responses = data.val() || {}
 
         return {
           accepted: users.filter(user => responses[user.id] == 'accepted'),
-          maybe: users.filter(user => !responses[user.id]),
+          maybe: users.filter(user => !responses[user.id] && user.status == 'active'),
           declined: users.filter(user => responses[user.id] == 'declined'),
         }
       })
@@ -94,7 +98,7 @@ async function sendMessagesToWorkspaces(app,workspaceId = null){
           let inviteMessage = getRandomMessage();
           const result = app.client.chat.postMessage({
             token: workspace.token,
-            channel: user,
+            channel: user.id,
             text: inviteMessage,
             blocks: MessageHeadsup(inviteMessage, meeting_request_id)
           });
