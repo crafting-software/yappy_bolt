@@ -10,7 +10,7 @@ const { HomeView } = require('./view/app_home');
 
 const { submitMeeting, editMeeting, deleteMeeting, scheduleMeeting, newInstantMeeting, RSVP } = require('./yappy/meetings')
 const { optIn, optOut } = require('./yappy/register')
-const { sendMessagesToWorkspaces } = require('./yappy/messaging')
+const { sendMessagesToWorkspaces, requestUserFeedback } = require('./yappy/messaging')
 
 const expressReceiver = new ExpressReceiver({
     signingSecret: config.slack.signing_secret,
@@ -46,17 +46,26 @@ app.view('yappy_submit_meeting', async (resp) => {
 
 app.event("app_home_opened", async ({ context, event, say, body }) => {
   const workspaceId = body.team_id
+  const userId = event.user
+  const ref = admin.database().ref(`users/${workspaceId}/${userId}`)
 
-  const user = await app.client.users.info({
-    token: context.botToken,
-    user: event.user
+  await ref.once('value', async (data) => {
+    const loggedUser = data.val()
+    const user = loggedUser ? await app.client.users.info({
+      token: context.botToken,
+      user: event.user
+    }).then(user => user.user) : null
+  
+    const result = await app.client.views.publish({
+      token: context.botToken,
+      user_id: event.user,
+      view: await HomeView(user)
+    });
   })
+});
 
-  const result = await app.client.views.publish({
-    token: context.botToken,
-    user_id: event.user,
-    view: await HomeView(user.user)
-  });
+app.message('', async (resp) => {
+  await requestUserFeedback(app,resp)
 });
 
 app.action('yappy_opt_in', async (resp) => {

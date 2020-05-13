@@ -2,6 +2,7 @@ const moment = require('moment')
 const admin = require("firebase-admin");
 const { parseTime } = require('../utils')
 const { HomeView } = require('../view/app_home')
+const { FeedbackRequestMessage } = require('../view/feedback_request_message')
 
 module.exports.optIn = async (app, {ack, say, context, body}) => {
     await ack()
@@ -24,18 +25,24 @@ module.exports.optIn = async (app, {ack, say, context, body}) => {
     })
 }
 
-module.exports.optOut = async (app, {ack, say, context, body}) => {
-    await ack()
-    const workspaceId = body.team.id
-    const userId = body.user.id
-  
-    await admin.database()
-      .ref(`users/${workspaceId}/${userId}`)
-      .remove()
+module.exports.optOut = async (app, {ack, payload, context, body}) => {
+  await ack()
+  const workspaceId = body.team.id
+  const userId = body.user.id
 
-    const result = await app.client.views.publish({
-      token: context.botToken,
-      user_id: userId,
-      view: await HomeView(null)
-    }) 
+  await admin.database()
+    .ref(`users/${workspaceId}/${userId}`)
+    .remove()
+    
+  await app.client.views.publish({
+    token: context.botToken,
+    user_id: userId,
+    view: await HomeView(null)
+  })
+
+  await app.client.chat.postMessage({
+    token: context.botToken,
+    channel: userId,
+    text: "Please provide some feedback to improve Yappy.\nYou can do this via direct message."
+  })
 }
