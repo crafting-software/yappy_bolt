@@ -8,7 +8,7 @@ const moment = require('moment')
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
 
-const { submitMeeting, editMeeting, deleteMeeting, scheduleMeeting, RSVP } = require('./yappy/meetings')
+const { submitMeeting, editMeeting, deleteMeeting, scheduleMeeting, newInstantMeeting, RSVP } = require('./yappy/meetings')
 const { optIn, optOut } = require('./yappy/register')
 const { sendMessagesToWorkspaces } = require('./yappy/messaging')
 
@@ -83,6 +83,10 @@ app.action('yappy_admin_schedule_meeting', async (resp) => {
   await scheduleMeeting(app, resp)
 })
 
+app.action('yappy_new_instant_meeting', async (resp) => {
+  newInstantMeeting(app, resp)
+})
+
 app.action('yappy_admin_menu', async ({ack,context, body}) => {
   await ack()
   const params = body.actions[0].selected_option.value.split('/')
@@ -99,11 +103,6 @@ app.action('yappy_admin_menu', async ({ack,context, body}) => {
       break
     }
   }
-})
-
-app.action('yappy_new_instant_meeting', async ({ack, context, body}) => {
-  await ack()
-  sendMessagesToWorkspaces(app, body.team.id)
 })
 
 /*

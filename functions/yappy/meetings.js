@@ -1,6 +1,7 @@
 const moment = require('moment')
 const admin = require("firebase-admin");
 const { parseTime } = require('../utils')
+const { TIMEOUT, sendMessagesToWorkspaces } = require('./messaging')
 
 const { HomeView } = require('../view/app_home')
 const { ScheduleMeetingModal } = require('../view/schedule_meeting_modal')
@@ -110,6 +111,16 @@ module.exports.deleteMeeting = async (app, optionArg, {body, context}) => {
     user_id: userId,
     view: await HomeView(user.user)
   })
+}
+
+module.exports.newInstantMeeting = async (app, {ack,body, context}) => {
+  await ack()
+  await app.client.chat.postMessage({
+    token: context.botToken,
+    channel: body.user.id,
+    text: `Your instant meeting starts in ${TIMEOUT/60000} minutes. Stay tuned!`
+  })
+  sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id})
 }
 
 module.exports.RSVP = {
