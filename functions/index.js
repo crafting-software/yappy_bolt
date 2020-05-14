@@ -50,11 +50,10 @@ app.event("app_home_opened", async ({ context, event, say, body }) => {
   const ref = admin.database().ref(`users/${workspaceId}/${userId}`)
 
   await ref.once('value', async (data) => {
-    const loggedUser = data.val()
-    const user = loggedUser ? await app.client.users.info({
+    const user = await app.client.users.info({
       token: context.botToken,
       user: event.user
-    }).then(user => user.user) : null
+    }).then(user => user.user)
   
     const result = await app.client.views.publish({
       token: context.botToken,

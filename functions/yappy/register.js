@@ -37,7 +37,7 @@ module.exports.optOut = async (app, {ack, payload, context, body}) => {
   await app.client.views.publish({
     token: context.botToken,
     user_id: userId,
-    view: await HomeView(null)
+    view: await HomeView(body.user)
   })
 
   await app.client.chat.postMessage({

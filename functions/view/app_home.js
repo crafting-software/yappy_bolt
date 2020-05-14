@@ -4,7 +4,12 @@ const { ScheduledSessions } = require('./components/scheduled_sessions')
 
 exports.HomeView = async (user) => {
 
-  const state = user
+  let userIsRegistered = await admin.database()
+    .ref(`users/${user.team_id}/${user.id}`)
+    .once('value', async data => data)
+    .then(user => user.val() ? true : false)
+
+  const state = userIsRegistered
     ? {
       text : 'If you don\'t want to receive any more notifications from me, you can opt out.',
       color: 'danger',
@@ -19,11 +24,13 @@ exports.HomeView = async (user) => {
     }
 
   let scheduledSessions
+  let loggedUser
 
-  if (user) {
+  if (userIsRegistered) {
     const scheduledSessionsRef = await admin.database()
       .ref(`scheduled_sessions/${user.team_id}`)
     const snapshot = await scheduledSessionsRef.once('value', async data => data)
+    loggedUser = user
 
     scheduledSessions = Object.entries(snapshot.val() || {}).map(session => session[1])
   }
@@ -42,8 +49,8 @@ exports.HomeView = async (user) => {
         }
       },
 
-      ...ScheduledSessions(user, await scheduledSessions || []),
-      ...NewSessionControls(user),
+      ...ScheduledSessions(loggedUser, await scheduledSessions || []),
+      ...NewSessionControls(loggedUser),
 
       //Opt in / out controls
       {
