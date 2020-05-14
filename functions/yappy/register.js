@@ -15,7 +15,7 @@ module.exports.optIn = async (app, {ack, say, context, body}) => {
     })
 
     await admin.database()
-      .ref(`users/${workspaceId}/${userId}`)
+      .ref(`users/${workspaceId}/${userId}/username`)
       .set(user.user.name)
   
     const result = await app.client.views.publish({

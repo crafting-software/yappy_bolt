@@ -119,6 +119,9 @@ module.exports.newInstantMeeting = async (app, {ack,body, context}) => {
     token: context.botToken,
     channel: body.user.id,
     text: `Your instant meeting starts in ${TIMEOUT/60000} minutes. Stay tuned!`
+  }).then(async message => {
+    const userChannel = message.channel
+    await admin.database().ref(`users/${body.user.team_id}/${body.user.id}/channel`).set(userChannel)
   })
   sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id})
 }
@@ -131,8 +134,8 @@ module.exports.RSVP = {
     let user_id = body.user.id;
     let meeting_request_id = body.actions[0].value;
     var usersRef = await admin.database()
-      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/${body.user.id}`)
-      .set('accepted');
+      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}`)
+      .set({response: 'accepted'});
   },
 
   decline: async (app, {ack, say, context, body, respond }) => {
@@ -141,7 +144,7 @@ module.exports.RSVP = {
     console.log(`Yapp declined by ${body.user.name}`);
     let meeting_request_id = body.actions[0].value;
     var usersRef = await admin.database()
-      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/${body.user.id}`)
+      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}`)
       .set('declined');
     }
 }
