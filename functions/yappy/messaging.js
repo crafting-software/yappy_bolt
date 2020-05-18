@@ -12,9 +12,9 @@ const { MessageHeadsup } = require('../view/message_heads_up')
 const { SessionListMessage } = require('../view/session_list')
 
 const MINUTE = 60000
-const TIMEOUT = MINUTE * 0.2
-const SESSION_DURATION = MINUTE * 1
-const GROUP_SIZE = 2
+const TIMEOUT = MINUTE * 5
+const SESSION_DURATION = MINUTE * 10
+const GROUP_SIZE = 3
 
 async function sendMeetingLinksToWorkspace(app, broadcastArgs){
   const userData = broadcastArgs.users.map(user =>{
@@ -22,7 +22,6 @@ async function sendMeetingLinksToWorkspace(app, broadcastArgs){
       name: user.profile.real_name,
       id: user.id,
       avatar: user.profile.image_48,
-      status: user.status
     }
   })
   const ref = admin.database().ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users`)
@@ -33,7 +32,7 @@ async function sendMeetingLinksToWorkspace(app, broadcastArgs){
     const userLists = {
       accepted: userData.filter(user => userResponses[user.id] && userResponses[user.id].response == 'accepted'),
       declined: userData.filter(user => userResponses[user.id] && userResponses[user.id].response == 'declined'),
-      maybe: userData.filter(user => !userResponses[user.id]),
+      maybe: userData.filter(user => !userResponses[user.id].response),
     }
     console.log(userLists)
     if (userLists.accepted.length) {
@@ -55,26 +54,24 @@ async function sendMeetingLinksToWorkspace(app, broadcastArgs){
           }).then(async message => {
             const channel = message.channel
             const ts = message.message.ts
-            console.log('timestamp', ts)
 
             //Timestamps are attached only after message is sent, so the corresponding message can be retrieved via slack api
             await admin.database()
               .ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}/ts`)
               .set(ts)
 
-            setTimeout(() => {
-              app.client.chat.update({
-                token: broadcastArgs.workspace.token,
-                channel: channel,
-                ts: ts,
-                text: 'This session has ended.',
-                blocks: []
-              })
-            }, SESSION_DURATION)
+            await admin.database()
+              .ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}/channel`)
+              .set(channel)
+
+            await admin.database()
+              .ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}/group`)
+              .set({id: meeting_group_id, meeting_link: meeting_url})
           });
         }
 
         for (const user of userLists.maybe) {
+
           const result = app.client.chat.postMessage({
             token: broadcastArgs.workspace.token,
             text: `There are some sessions in progress you can join`,
@@ -83,7 +80,8 @@ async function sendMeetingLinksToWorkspace(app, broadcastArgs){
           }).then(async res => {
             await admin.database().ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}`).set({
               response: 'none',
-              ts: res.ts
+              ts: res.ts,
+              channel: res.channel
             })
           })
         }
@@ -107,9 +105,13 @@ async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingAr
         const isInitiator = instantMeetingArgs && user.id == instantMeetingArgs.initiatorId
         if (isInitiator)
           db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}`)
-            .set({response: 'accepted'})
+            .set({response: 'accepted', headsup_ts: instantMeetingArgs.headsup_ts})
+
         return !isInitiator
       })
+
+      const ts_start = moment.utc().unix()
+      const ts_end = ts_start + SESSION_DURATION/1000
 
       for(let user of usersExceptInitiator){
         let inviteMessage = getRandomMessage();
@@ -120,23 +122,33 @@ async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingAr
           blocks: MessageHeadsup(inviteMessage, meeting_request_id)
         }).then(async message => {
           const userChannel = message.channel
-          const ts_start = message.message.ts
-          const ts_end = ts_start + SESSION_DURATION/1000
+          if (!ts_start && !ts_end){
+            ts_start = message.ts,
+            ts_end = parseFloat(ts_start) + SESSION_DURATION/1000
+          }
           await db.ref(`users/${workspace.team.id}/${user.id}/channel`).set(userChannel)
-          await db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/time`).set({
-            ts_start: ts_start,
-            ts_end: ts_end
-          })
+          await db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}/headsup_ts`)
+            .set(message.ts)
+          //Delete message after timeout
+          setTimeout(async () => {
+            await app.client.chat.delete({
+              token: workspace.token,
+              channel: userChannel,
+              ts: message.ts
+            })
+            sendMeetingLinksToWorkspace(app, {
+              workspace: workspace,
+              meetingId: meeting_request_id,
+              users: users
+            })
+          }, TIMEOUT);
         })
       }
 
-      setTimeout(function(){
-        sendMeetingLinksToWorkspace(app, {
-          workspace: workspace,
-          meetingId: meeting_request_id,
-          users: users
-        });
-      }, TIMEOUT)
+      await db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/timestamps`).set({
+        ts_start: ts_start,
+        ts_end: ts_end
+      })
     }
   })
 }

@@ -8,7 +8,7 @@ const moment = require('moment')
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
 
-const { submitMeeting, editMeeting, deleteMeeting, scheduleMeeting, newInstantMeeting, RSVP } = require('./yappy/meetings')
+const { submitMeeting, editMeeting, endMeeting, deleteMeeting, scheduleMeeting, newInstantMeeting, RSVP } = require('./yappy/meetings')
 const { optIn, optOut } = require('./yappy/register')
 const { sendMessagesToWorkspaces, requestUserFeedback } = require('./yappy/messaging')
 
@@ -132,11 +132,29 @@ exports.scheduledFunction = functions.runWith({
     const workspaces = data.val()
 
     for (const ws in workspaces){
-      for (const session in workspaces[ws]) {
+      const workspaceSessions = workspaces[ws]
+      for (const session in workspaceSessions) {
         if (session == utcTime){
           sendMessagesToWorkspaces(app, ws)
         }
       }
+
+      const sessionsRef = await admin.database()
+        .ref(`sessions/${ws}`)
+
+      sessionsRef.once("value", async data => {
+        const wsSessions = data.val()
+        if (wsSessions){
+          for (const session of Object.entries(wsSessions)){
+            await admin.database().ref(`installations/${ws}`).once("value", async data => {
+              const workspace = data.val()
+              if (parseInt(session[1].timestamps.ts_end) <= moment.utc().unix() && !session[1].session_ended){
+                endMeeting(app, {workspace: workspace, session: session})
+              }
+            })
+          }
+        }
+      })
     }
   })
 });

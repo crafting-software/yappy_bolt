@@ -13,10 +13,15 @@ module.exports.optIn = async (app, {ack, say, context, body}) => {
       token: context.botToken,
       user: userId
     })
+    console.log(user.user)
 
     await admin.database()
-      .ref(`users/${workspaceId}/${userId}/username`)
-      .set(user.user.name)
+      .ref(`users/${workspaceId}/${userId}`)
+      .set({
+        name: user.user.name,
+        id: user.user.id,
+        avatar: user.user.profile.image_48
+      })
   
     const result = await app.client.views.publish({
       token: context.botToken,

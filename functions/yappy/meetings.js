@@ -5,6 +5,7 @@ const { TIMEOUT, sendMessagesToWorkspaces } = require('./messaging')
 
 const { HomeView } = require('../view/app_home')
 const { ScheduleMeetingModal } = require('../view/schedule_meeting_modal')
+const { SessionListMessage } = require('../view/session_list')
 
 module.exports.scheduleMeeting = async (app, {ack, context, body}) => {
   await ack()
@@ -113,6 +114,50 @@ module.exports.deleteMeeting = async (app, optionArg, {body, context}) => {
   })
 }
 
+module.exports.endMeeting = async (app, {workspace, session}) => {
+  for (const user of Object.entries(session[1].users || {})){
+
+    //If user was in that conversation, remove message with join link.
+    if (user[1].response == 'accepted'){
+      await app.client.chat.update({
+        token: workspace.token,
+        channel: user[1].channel,
+        ts: user[1].ts,
+        text: 'This session has ended.',
+        blocks: []
+      })
+    }
+
+    //If user didn't respond, update the links to the available calls
+    else if (user[1].response == 'none'){
+      await admin.database().ref(`sessions/${workspace.team.id}`).once("value", async data => {
+        let userData
+        await admin.database().ref(`users/${workspace.team.id}`).once('value', async data => {userData = data.val()})
+
+        console.log("USER DATA", userData)
+        const activeSessions = Object.entries(data.val()).filter(session => session[1].session_ended == false)
+        const inviteLinks = activeSessions.map(session => {
+          urls = [... new Set(Object.entries(session[1].users).map(user => user[1].group.meeting_links))]
+          return urls.map(url => {
+            return {
+            url: url,
+            users: userData.filter(u => u.id == user[0])
+          }})
+        })
+
+        await app.client.chat.update({
+          token: workspace.token,
+          channel: user[1].channel,
+          ts: user[1].ts,
+          text: ' ',
+          blocks: SessionListMessage(inviteLinks)
+        })
+      })
+    }
+    await admin.database().ref(`sessions/${workspace.team.id}/${session[0]}/session_ended`).set(true)
+  }
+}
+
 module.exports.newInstantMeeting = async (app, {ack,body, context}) => {
   await ack()
   await app.client.chat.postMessage({
@@ -122,8 +167,18 @@ module.exports.newInstantMeeting = async (app, {ack,body, context}) => {
   }).then(async message => {
     const userChannel = message.channel
     await admin.database().ref(`users/${body.user.team_id}/${body.user.id}/channel`).set(userChannel)
+
+    setTimeout(async () => {
+    
+      await app.client.chat.delete({
+        token: context.botToken,
+        channel: userChannel,
+        ts: message.ts
+      })
+    },TIMEOUT)
+
+    sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id, headsup_ts: message.ts})
   })
-  sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id})
 }
 
 module.exports.RSVP = {
@@ -145,6 +200,6 @@ module.exports.RSVP = {
     let meeting_request_id = body.actions[0].value;
     var usersRef = await admin.database()
       .ref(`sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}`)
-      .set('declined');
+      .set({response: 'declined'});
     }
 }
