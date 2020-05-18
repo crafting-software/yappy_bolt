@@ -148,7 +148,7 @@ exports.scheduledFunction = functions.runWith({
           for (const session of Object.entries(wsSessions)){
             await admin.database().ref(`installations/${ws}`).once("value", async data => {
               const workspace = data.val()
-              if (parseInt(session[1].timestamps.ts_end) <= moment.utc().unix() && !session[1].session_ended){
+              if (session[1].timestamps.ts_end <= moment.utc().unix() && !session[1].session_ended){
                 endMeeting(app, {workspace: workspace, session: session})
               }
             })

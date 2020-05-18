@@ -111,7 +111,7 @@ async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingAr
       })
 
       const ts_start = moment.utc().unix()
-      const ts_end = ts_start + SESSION_DURATION/1000
+      const ts_end = ts_start + (TIMEOUT + SESSION_DURATION)/1000
 
       for(let user of usersExceptInitiator){
         let inviteMessage = getRandomMessage();
@@ -122,10 +122,6 @@ async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingAr
           blocks: MessageHeadsup(inviteMessage, meeting_request_id)
         }).then(async message => {
           const userChannel = message.channel
-          if (!ts_start && !ts_end){
-            ts_start = message.ts,
-            ts_end = parseFloat(ts_start) + SESSION_DURATION/1000
-          }
           await db.ref(`users/${workspace.team.id}/${user.id}/channel`).set(userChannel)
           await db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}/headsup_ts`)
             .set(message.ts)
