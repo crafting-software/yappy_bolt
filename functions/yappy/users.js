@@ -4,7 +4,7 @@ module.exports.getSubscribedUsers = async function (app, workspace) {
 
     let usersRef = await admin.database()
       .ref(`users/${workspace.team.id}`)
-  
+
     const userPromises = await usersRef.once("value", async function(data){
       return data.val()
     })
@@ -13,7 +13,7 @@ module.exports.getSubscribedUsers = async function (app, workspace) {
         token: workspace.token,
         user: user[0]
       })))
-    
+
     const onlineUsers = await Promise.all(userPromises)
       .then(async users => {
         for (let user of users) {
@@ -28,10 +28,10 @@ module.exports.getSubscribedUsers = async function (app, workspace) {
       .then(users => users
         .map(user => user.user)
         .filter(user => user.status == 'active'))
-    
+
     console.log("Retrieved users list for:", workspace)
-  
+
     console.log(`Active users in ${workspace.team.name} : ${onlineUsers.length}`)
-  
+
     return onlineUsers
   }

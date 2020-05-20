@@ -1,13 +1,14 @@
 const moment = require('moment')
 const admin = require("firebase-admin");
 const { parseTime } = require('../utils')
-const { TIMEOUT, sendMessagesToWorkspaces } = require('./messaging')
+const { sendMeetingLinksToWorkspace, sendMessagesToWorkspaces } = require('./messaging')
+const { getSubscribedUsers } = require('./users')
 
 const { HomeView } = require('../view/app_home')
 const { ScheduleMeetingModal } = require('../view/schedule_meeting_modal')
 const { SessionListMessage } = require('../view/session_list')
 
-module.exports.scheduleMeeting = async (app, {ack, context, body}) => {
+const schedule = async (app, {ack, context, body}) => {
   await ack()
   await app.client.views.open({
     token: context.botToken,
@@ -16,7 +17,7 @@ module.exports.scheduleMeeting = async (app, {ack, context, body}) => {
   })
 }
 
-module.exports.submitMeeting = async (app, {ack, body, view, context}) => {
+const submit = async (app, {ack, body, view, context}) => {
     await ack()
 
     const userId = body.user.id
@@ -63,7 +64,7 @@ module.exports.submitMeeting = async (app, {ack, body, view, context}) => {
     });
 }
 
-module.exports.editMeeting = async (app,time, {body, context}) => {
+const edit = async (app,time, {body, context}) => {
   const workspaceId = body.team.id
   const userId = body.user.id
 
@@ -92,7 +93,7 @@ const result = await app.client.views.publish({
 })
 }
 
-module.exports.deleteMeeting = async (app, optionArg, {body, context}) => {
+const deleteScheduled = async (app, optionArg, {body, context}) => {
   const workspaceId = body.team.id
   const userId = body.user.id
 
@@ -114,7 +115,7 @@ module.exports.deleteMeeting = async (app, optionArg, {body, context}) => {
   })
 }
 
-module.exports.endMeeting = async (app, {workspace, session}) => {
+const end = async (app, {workspace, session}) => {
   for (const user of Object.entries(session[1].users || {})){
 
     //If user was in that conversation, remove message with join link.
@@ -133,9 +134,7 @@ module.exports.endMeeting = async (app, {workspace, session}) => {
       await admin.database().ref(`sessions/${workspace.team.id}`).once("value", async data => {
         let userData
         await admin.database().ref(`users/${workspace.team.id}`).once('value', async data => {userData = data.val()})
-
-        console.log("USER DATA", userData)
-        const activeSessions = Object.entries(data.val()).filter(session => session[1].session_ended == false)
+        const activeSessions = Object.entries(data.val()).filter(session => session[1].status != 'ended')
         const inviteLinks = activeSessions.map(session => {
           urls = [... new Set(Object.entries(session[1].users).map(user => user[1].group.meeting_links))]
           return urls.map(url => {
@@ -154,31 +153,33 @@ module.exports.endMeeting = async (app, {workspace, session}) => {
         })
       })
     }
-    await admin.database().ref(`sessions/${workspace.team.id}/${session[0]}/session_ended`).set(true)
+    await admin.database().ref(`sessions/${workspace.team.id}/${session[0]}/status`).set("ended")
   }
 }
 
-module.exports.newInstantMeeting = async (app, {ack,body, context}) => {
+const instant = async (app, {ack,body, context}) => {
   await ack()
-  await app.client.chat.postMessage({
-    token: context.botToken,
-    channel: body.user.id,
-    text: `Your instant meeting starts in ${TIMEOUT/60000} minutes. Stay tuned!`
-  }).then(async message => {
-    const userChannel = message.channel
-    await admin.database().ref(`users/${body.user.team_id}/${body.user.id}/channel`).set(userChannel)
+  sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id})
+}
 
-    setTimeout(async () => {
-    
-      await app.client.chat.delete({
-        token: context.botToken,
-        channel: userChannel,
-        ts: message.ts
+const start = async (app, {workspace, users, sessionId}) => {
+  for (const user in users){
+    await app.client.chat.delete({
+      token: workspace.token,
+      channel: users[user].channel,
+      ts: users[user].headsup_ts
+    })
+  }
+  const idList = Object.keys(users)
+  await getSubscribedUsers(app,workspace)
+    .then(list => list.filter(user => idList.includes(user.id)))
+    .then(async list => {
+      sendMeetingLinksToWorkspace(app, {
+        workspace: workspace,
+        meetingId: sessionId,
+        users: list
       })
-    },TIMEOUT)
-
-    sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id, headsup_ts: message.ts})
-  })
+    })
 }
 
 module.exports.RSVP = {
@@ -189,8 +190,8 @@ module.exports.RSVP = {
     let user_id = body.user.id;
     let meeting_request_id = body.actions[0].value;
     var usersRef = await admin.database()
-      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}`)
-      .set({response: 'accepted'});
+      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`)
+      .set('accepted');
   },
 
   decline: async (app, {ack, say, context, body, respond }) => {
@@ -199,7 +200,9 @@ module.exports.RSVP = {
     console.log(`Yapp declined by ${body.user.name}`);
     let meeting_request_id = body.actions[0].value;
     var usersRef = await admin.database()
-      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}`)
-      .set({response: 'declined'});
+      .ref(`sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`)
+      .set('declined');
     }
 }
+
+module.exports.Meeting = { schedule, deleteScheduled, edit, instant, start, end, submit}

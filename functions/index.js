@@ -8,9 +8,9 @@ const moment = require('moment')
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { HomeView } = require('./view/app_home');
 
-const { submitMeeting, editMeeting, endMeeting, deleteMeeting, scheduleMeeting, newInstantMeeting, RSVP } = require('./yappy/meetings')
+const { Meeting, RSVP } = require('./yappy/meetings')
 const { optIn, optOut } = require('./yappy/register')
-const { sendMessagesToWorkspaces, requestUserFeedback } = require('./yappy/messaging')
+const { TIMEOUT, sendMessagesToWorkspaces, requestUserFeedback } = require('./yappy/messaging')
 
 const expressReceiver = new ExpressReceiver({
     signingSecret: config.slack.signing_secret,
@@ -41,26 +41,20 @@ app.command('/echo-from-firebase', async ({ command, ack, say }) => {
 });
 
 app.view('yappy_submit_meeting', async (resp) => {
-  await submitMeeting(app, resp)
+  await Meeting.submit(app, resp)
 })
 
-app.event("app_home_opened", async ({ context, event, say, body }) => {
-  const workspaceId = body.team_id
-  const userId = event.user
-  const ref = admin.database().ref(`users/${workspaceId}/${userId}`)
-
-  await ref.once('value', async (data) => {
+app.event("app_home_opened", async ({ context, event }) => {
     const user = await app.client.users.info({
       token: context.botToken,
       user: event.user
     }).then(user => user.user)
-  
-    const result = await app.client.views.publish({
-      token: context.botToken,
-      user_id: event.user,
-      view: await HomeView(user)
-    });
-  })
+
+  const result = await app.client.views.publish({
+    token: context.botToken,
+    user_id: event.user,
+    view: await HomeView(user)
+  });
 });
 
 app.message('', async (resp) => {
@@ -88,11 +82,11 @@ app.action('join_yappy_meeting', async ({ack}) => {
 })
 
 app.action('yappy_admin_schedule_meeting', async (resp) => {
-  await scheduleMeeting(app, resp)
+  await Meeting.schedule(app, resp)
 })
 
 app.action('yappy_new_instant_meeting', async (resp) => {
-  newInstantMeeting(app, resp)
+  await Meeting.instant(app, resp)
 })
 
 app.action('yappy_admin_menu', async ({ack,context, body}) => {
@@ -102,12 +96,12 @@ app.action('yappy_admin_menu', async ({ack,context, body}) => {
   const [selectedOption, optionArg] = [params[0], params[1]]
   switch (selectedOption) {
     case "delete_meeting": {
-        deleteMeeting(app, optionArg, {body, context})
+        Meeting.deleteScheduled(app, optionArg, {body, context})
       break
     }
 
     case "edit_meeting": {
-        editMeeting(app, optionArg, {body,context})
+        Meeting.edit(app, optionArg, {body,context})
       break
     }
   }
@@ -146,10 +140,21 @@ exports.scheduledFunction = functions.runWith({
         const wsSessions = data.val()
         if (wsSessions){
           for (const session of Object.entries(wsSessions)){
+            const now = moment.utc().unix()
+            const start = session[1].timestamps.ts_start
+            const end = session[1].timestamps.ts_end
             await admin.database().ref(`installations/${ws}`).once("value", async data => {
               const workspace = data.val()
-              if (session[1].timestamps.ts_end <= moment.utc().unix() && !session[1].session_ended){
-                endMeeting(app, {workspace: workspace, session: session})
+              if (end <=  now && session[1].status != 'ended'){
+                Meeting.end(app, {workspace: workspace, session: session})
+              }
+              else if (session[1].status == 'pending' && now >= start + TIMEOUT/1000 && end >= now){
+                console.log('session '+session[0]+' started')
+                await admin.database().ref(`sessions/${ws}/${session[0]}/status`).set('in progress')
+                .then(async result => {
+                  const users = session[1].users
+                  Meeting.start(app, {workspace: workspace, users: users, sessionId: session[0]})
+                })
               }
             })
           }

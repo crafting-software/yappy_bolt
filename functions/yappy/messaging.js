@@ -16,15 +16,15 @@ const TIMEOUT = MINUTE * 5
 const SESSION_DURATION = MINUTE * 10
 const GROUP_SIZE = 3
 
-async function sendMeetingLinksToWorkspace(app, broadcastArgs){
-  const userData = broadcastArgs.users.map(user =>{
+async function sendMeetingLinksToWorkspace(app, {workspace, meetingId, users}){
+  const userData = users.map(user =>{
     return {
       name: user.profile.real_name,
       id: user.id,
       avatar: user.profile.image_48,
     }
   })
-  const ref = admin.database().ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users`)
+  const ref = admin.database().ref(`sessions/${workspace.team.id}/${meetingId}/users`)
   ref.once("value", async function(data){
     const userResponses = data.val() || []
     console.log('User responses', userResponses)
@@ -47,7 +47,7 @@ async function sendMeetingLinksToWorkspace(app, broadcastArgs){
 
         for(let user of group) {
           const result = app.client.chat.postMessage({
-            token: broadcastArgs.workspace.token,
+            token: workspace.token,
             channel: user.id,
             text: "Time to join your yapping meeting.",
             blocks: JoinMessage(meeting_url, group, "Don't hold back. Join others to start yapping.")
@@ -57,15 +57,15 @@ async function sendMeetingLinksToWorkspace(app, broadcastArgs){
 
             //Timestamps are attached only after message is sent, so the corresponding message can be retrieved via slack api
             await admin.database()
-              .ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}/ts`)
+              .ref(`sessions/${workspace.team.id}/${meetingId}/users/${user.id}/ts`)
               .set(ts)
 
             await admin.database()
-              .ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}/channel`)
+              .ref(`sessions/${workspace.team.id}/${meetingId}/users/${user.id}/channel`)
               .set(channel)
 
             await admin.database()
-              .ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}/group`)
+              .ref(`sessions/${workspace.team.id}/${meetingId}/users/${user.id}/group`)
               .set({id: meeting_group_id, meeting_link: meeting_url})
           });
         }
@@ -73,12 +73,12 @@ async function sendMeetingLinksToWorkspace(app, broadcastArgs){
         for (const user of userLists.maybe) {
 
           const result = app.client.chat.postMessage({
-            token: broadcastArgs.workspace.token,
+            token: workspace.token,
             text: `There are some sessions in progress you can join`,
             channel: user.id,
             blocks: await SessionListMessage(ongoingMeetings) 
           }).then(async res => {
-            await admin.database().ref(`sessions/${broadcastArgs.workspace.team.id}/${broadcastArgs.meetingId}/users/${user.id}`).set({
+            await admin.database().ref(`sessions/${workspace.team.id}/${meetingId}/users/${user.id}`).set({
               response: 'none',
               ts: res.ts,
               channel: res.channel
@@ -101,44 +101,40 @@ async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingAr
       let meeting_request_id = v4();
 
       const users = await getSubscribedUsers(app, workspace)
-      const usersExceptInitiator = users.filter(user => {
-        const isInitiator = instantMeetingArgs && user.id == instantMeetingArgs.initiatorId
-        if (isInitiator)
-          db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}`)
-            .set({response: 'accepted', headsup_ts: instantMeetingArgs.headsup_ts})
-
-        return !isInitiator
-      })
-
       const ts_start = moment.utc().unix()
       const ts_end = ts_start + (TIMEOUT + SESSION_DURATION)/1000
 
-      for(let user of usersExceptInitiator){
-        let inviteMessage = getRandomMessage();
-        const result = app.client.chat.postMessage({
-          token: workspace.token,
-          channel: user.id,
-          text: inviteMessage,
-          blocks: MessageHeadsup(inviteMessage, meeting_request_id)
-        }).then(async message => {
-          const userChannel = message.channel
-          await db.ref(`users/${workspace.team.id}/${user.id}/channel`).set(userChannel)
-          await db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}/headsup_ts`)
-            .set(message.ts)
-          //Delete message after timeout
-          setTimeout(async () => {
-            await app.client.chat.delete({
-              token: workspace.token,
-              channel: userChannel,
-              ts: message.ts
-            })
-            sendMeetingLinksToWorkspace(app, {
-              workspace: workspace,
-              meetingId: meeting_request_id,
-              users: users
-            })
-          }, TIMEOUT);
-        })
+      if (users.length)
+      db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/status`)
+        .set('pending')
+      for (const user of users) {
+        const isInitiator = instantMeetingArgs && user.id == instantMeetingArgs.initiatorId
+        if (isInitiator){
+          await app.client.chat.postMessage({
+            token: workspace.token,
+            channel: user.id,
+            text: `Your instant meeting starts in ${TIMEOUT/60000} minutes. Stay tuned!`
+          }).then(message => {
+            db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}`)
+            .set({response: 'accepted', headsup_ts: message.ts, channel: message.channel})
+          })
+          
+        }
+        else {
+          const inviteMessage = getRandomMessage()
+          await app.client.chat.postMessage({
+            token: workspace.token,
+            channel: user.id,
+            text: inviteMessage,
+            blocks: MessageHeadsup(inviteMessage, meeting_request_id)
+          }).then(async message => {
+            const userChannel = message.channel
+            await db.ref(`users/${workspace.team.id}/${user.id}/channel`).set(userChannel)
+
+            await db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}`)
+            .set({headsup_ts: message.ts, channel: userChannel})
+          })
+        }
       }
 
       await db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/timestamps`).set({
