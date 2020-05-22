@@ -3,8 +3,8 @@ const admin = require("firebase-admin");
 const { v4 } = require('uuid');
 
 const { splitToChunks } = require('../utils')
-const { getRandomMessage } = require('../strings')
-const { getSubscribedUsers } = require('./users')
+const { getRandomMessage, instantYapMessage } = require('../strings')
+const { getSubscribedUsers, getInstantYapUsers } = require('./users')
 
 const { HomeView } = require('../view/app_home')
 const { JoinMessage } = require('../view/join_message')
@@ -93,6 +93,8 @@ async function sendMeetingLinksToWorkspace(app, {workspace, meetingId, users}){
 
 async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingArgs = null){
   var db = admin.database();
+  const recipients = instantMeetingArgs && instantMeetingArgs.recipients
+  const initiatorId = instantMeetingArgs && instantMeetingArgs.initiatorId
   var ref = db.ref(`installations${workspaceId? `/${workspaceId}` : ""}`);
   let snapshot = await ref.once("value", async function(data){
     let workspaces = workspaceId ? {workspace : data.val() } : data.val();
@@ -100,15 +102,18 @@ async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingAr
       console.log("Getting users for ", workspace.team.name)
       let meeting_request_id = v4();
 
-      const users = await getSubscribedUsers(app, workspace)
+      const users = recipients
+        ? await getInstantYapUsers(app,workspace,recipients)
+        : await getSubscribedUsers(app, workspace)
+
       const ts_start = moment.utc().unix()
       const ts_end = ts_start + (TIMEOUT + SESSION_DURATION)/1000
 
       if (users.length)
-      db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/status`)
-        .set('pending')
+        db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/status`)
+          .set('pending')
       for (const user of users) {
-        const isInitiator = instantMeetingArgs && user.id == instantMeetingArgs.initiatorId
+        const isInitiator = user.id == initiatorId
         if (isInitiator){
           await app.client.chat.postMessage({
             token: workspace.token,
@@ -118,10 +123,10 @@ async function sendMessagesToWorkspaces(app,workspaceId = null, instantMeetingAr
             db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}`)
             .set({response: 'accepted', headsup_ts: message.ts, channel: message.channel})
           })
-          
+
         }
         else {
-          const inviteMessage = getRandomMessage()
+          const inviteMessage = instantMeetingArgs ? instantYapMessage(initiatorId, TIMEOUT/60000) : getRandomMessage()
           await app.client.chat.postMessage({
             token: workspace.token,
             channel: user.id,
@@ -166,4 +171,5 @@ async function requestUserFeedback(app, {body, context}){
     })
   }
 }
-module.exports = {sendMeetingLinksToWorkspace, sendMessagesToWorkspaces, requestUserFeedback, TIMEOUT}
+
+module.exports = {sendMeetingLinksToWorkspace, sendMessagesToWorkspaces, requestUserFeedback, TIMEOUT, GROUP_SIZE}

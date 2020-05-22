@@ -11,6 +11,7 @@ const { HomeView } = require('./view/app_home');
 const { Meeting, RSVP } = require('./yappy/meetings')
 const { optIn, optOut } = require('./yappy/register')
 const { TIMEOUT, sendMessagesToWorkspaces, requestUserFeedback } = require('./yappy/messaging')
+const { InstantYap } = require('./yappy/instant_yap')
 
 const expressReceiver = new ExpressReceiver({
     signingSecret: config.slack.signing_secret,
@@ -39,6 +40,11 @@ app.command('/echo-from-firebase', async ({ command, ack, say }) => {
 
   await say(`${command.text}`);
 });
+
+app.view('yappy_create_instant_yap', async (resp) => {
+  // console.log(resp.body.view.state)
+  await Meeting.instant(app, resp)
+})
 
 app.view('yappy_submit_meeting', async (resp) => {
   await Meeting.submit(app, resp)
@@ -86,7 +92,13 @@ app.action('yappy_admin_schedule_meeting', async (resp) => {
 })
 
 app.action('yappy_new_instant_meeting', async (resp) => {
-  await Meeting.instant(app, resp)
+  await InstantYap.openModal(app, resp)
+})
+
+app.action('yappy_select_users', async (resp) => {
+  await resp.ack()
+  InstantYap.select(app, resp)
+
 })
 
 app.action('yappy_admin_menu', async ({ack,context, body}) => {
@@ -99,7 +111,6 @@ app.action('yappy_admin_menu', async ({ack,context, body}) => {
         Meeting.deleteScheduled(app, optionArg, {body, context})
       break
     }
-
     case "edit_meeting": {
         Meeting.edit(app, optionArg, {body,context})
       break
@@ -111,7 +122,7 @@ app.action('yappy_admin_menu', async ({ack,context, body}) => {
   ========== Exported Functions ==========
 */
 
-exports.slack = functions.https.onRequest(async (req, res) => {
+exports.slack = functions.runWith({memory: '2GB'}).https.onRequest(async (req, res) => {
   console.log('started server')
   expressReceiver.app(req, res);
 });

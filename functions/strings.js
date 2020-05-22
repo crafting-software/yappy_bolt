@@ -14,3 +14,4 @@ const messages = [
 ]
 
 module.exports.getRandomMessage = () => messages[Math.floor(Math.random()*messages.length)]
+module.exports.instantYapMessage = (initiatorId,timeout) => `<@${initiatorId}> invited you to an instant yap!\nThe session will start ${timeout} minutes from now. What do you say?`

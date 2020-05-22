@@ -13,7 +13,6 @@ module.exports.optIn = async (app, {ack, say, context, body}) => {
       token: context.botToken,
       user: userId
     })
-    console.log(user.user)
 
     await admin.database()
       .ref(`users/${workspaceId}/${userId}`)
@@ -38,7 +37,7 @@ module.exports.optOut = async (app, {ack, payload, context, body}) => {
   await admin.database()
     .ref(`users/${workspaceId}/${userId}`)
     .remove()
-    
+
   await app.client.views.publish({
     token: context.botToken,
     user_id: userId,

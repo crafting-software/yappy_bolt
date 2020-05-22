@@ -159,7 +159,10 @@ const end = async (app, {workspace, session}) => {
 
 const instant = async (app, {ack,body, context}) => {
   await ack()
-  sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id})
+  const users = body.view.state.values.instant_yap_input.yappy_select_users.selected_options
+    .map(element => element.value.split('/')[1])
+  console.log(users)
+  sendMessagesToWorkspaces(app, body.team.id, {initiatorId: body.user.id, recipients: [...users, body.user.id]})
 }
 
 const start = async (app, {workspace, users, sessionId}) => {

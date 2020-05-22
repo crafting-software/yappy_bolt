@@ -1,6 +1,6 @@
 const admin = require("firebase-admin");
 
-module.exports.getSubscribedUsers = async function (app, workspace) {
+const getSubscribedUsers = async function (app, workspace) {
 
     let usersRef = await admin.database()
       .ref(`users/${workspace.team.id}`)
@@ -35,3 +35,8 @@ module.exports.getSubscribedUsers = async function (app, workspace) {
 
     return onlineUsers
   }
+
+const getInstantYapUsers = async (app,workspace,users) => await getSubscribedUsers(app,workspace)
+  .then(list => list.filter(user => users.includes(user.id)))
+
+module.exports = { getSubscribedUsers, getInstantYapUsers }
