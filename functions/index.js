@@ -12,6 +12,7 @@ const { Meeting, RSVP } = require('./yappy/meetings')
 const { optIn, optOut } = require('./yappy/register')
 const { TIMEOUT, sendMessagesToWorkspaces, requestUserFeedback } = require('./yappy/messaging')
 const { InstantYap } = require('./yappy/instant_yap')
+const { onboarding } = require('./yappy/onboarding')
 
 const expressReceiver = new ExpressReceiver({
     signingSecret: config.slack.signing_secret,
@@ -50,6 +51,10 @@ app.view('yappy_submit_meeting', async (resp) => {
   await Meeting.submit(app, resp)
 })
 
+app.event('team_join', async (resp) => {
+  await onboarding.sendPrivateMessage(resp);
+})
+
 app.event("app_home_opened", async ({ context, event }) => {
     const user = await app.client.users.info({
       token: context.botToken,
@@ -72,6 +77,10 @@ app.action('yappy_opt_in', async (resp) => {
 });
 
 app.action('yappy_opt_out', async (resp) => {
+  await optOut(app, resp)
+});
+
+app.action("yappy_message_opt_out", async (resp) => {
   await optOut(app, resp)
 });
 
@@ -217,6 +226,9 @@ exports.oauth = functions.https.onRequest(async (request, response) => {
   console.log("OAuth Success!")
   console.log(result)
 
+  console.log('Sending onboarding message')
+  await onboarding.sendGroupMessage(result)
+  
   await admin.database().ref("installations").child(result.team.id).set({
     token: result.access_token,
     team: {
