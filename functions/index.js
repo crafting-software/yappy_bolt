@@ -1,188 +1,105 @@
-'use strict'
-const functions = require('firebase-functions');
+"use strict";
+const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const rp = require("request-promise");
 const config = functions.config();
-const moment = require('moment')
+const moment = require("moment");
 
-const { App, ExpressReceiver } = require('@slack/bolt');
-const { HomeView } = require('./view/app_home');
-
-const { Meeting, RSVP } = require('./yappy/meetings')
-const { optIn, optOut } = require('./yappy/register')
-const { TIMEOUT, sendMessagesToWorkspaces, requestUserFeedback } = require('./yappy/messaging')
-const { InstantYap } = require('./yappy/instant_yap')
-const { onboarding } = require('./yappy/onboarding')
+const { ExpressReceiver } = require("@slack/bolt");
+const { Meeting } = require("./yappy/meetings");
+const { TIMEOUT, sendMessagesToWorkspaces } = require("./yappy/messaging");
+const { onboarding } = require("./yappy/onboarding");
+const { Yappy } = require("./app");
 
 const expressReceiver = new ExpressReceiver({
-    signingSecret: config.slack.signing_secret,
-    endpoints: '/events'
-});
-
-const app = new App({
-    receiver: expressReceiver,
-    token: config.slack.bot_token
+  signingSecret: config.slack.signing_secret,
+  endpoints: "/events",
 });
 
 var serviceAccount = require("./yappy_service_account.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://yappy-79985.firebaseio.com"
+  databaseURL: "https://yappy-79985.firebaseio.com",
 });
 
-// Global error handler
-app.error(console.log);
-app.command('/echo-from-firebase', async ({ command, ack, say }) => {
-  // Acknowledge command request
-  console.log(functions.config().firebase)
-  console.log('Requesting Echo Test');
-  await ack();
-
-  await say(`${command.text}`);
-});
-
-app.view('yappy_create_instant_yap', async (resp) => {
-  // console.log(resp.body.view.state)
-  await Meeting.instant(app, resp)
-})
-
-app.view('yappy_submit_meeting', async (resp) => {
-  await Meeting.submit(app, resp)
-})
-
-app.event('team_join', async (resp) => {
-  await onboarding.sendPrivateMessage(resp);
-})
-
-app.event("app_home_opened", async ({ context, event }) => {
-    const user = await app.client.users.info({
-      token: context.botToken,
-      user: event.user
-    }).then(user => user.user)
-
-  const result = await app.client.views.publish({
-    token: context.botToken,
-    user_id: event.user,
-    view: await HomeView(user)
-  });
-});
-
-app.message('', async (resp) => {
-  await requestUserFeedback(app,resp)
-});
-
-app.action('yappy_opt_in', async (resp) => {
-  await optIn(app, resp)
-});
-
-app.action('yappy_opt_out', async (resp) => {
-  await optOut(app, resp)
-});
-
-app.action("yappy_message_opt_out", async (resp) => {
-  await optOut(app, resp)
-});
-
-app.action('accept_yappy_session', async (resp) => {
-  await RSVP.accept(app,resp)
-});
-
-app.action('decline_yappy_session', async (resp) => {
-  await RSVP.decline(app, resp)
-});
-
-app.action('join_yappy_meeting', async ({ack}) => {
-  await ack()
-})
-
-app.action('yappy_admin_schedule_meeting', async (resp) => {
-  await Meeting.schedule(app, resp)
-})
-
-app.action('yappy_new_instant_meeting', async (resp) => {
-  await InstantYap.openModal(app, resp)
-})
-
-app.action('yappy_select_users', async (resp) => {
-  await resp.ack()
-  InstantYap.select(app, resp)
-
-})
-
-app.action('yappy_admin_menu', async ({ack,context, body}) => {
-  await ack()
-  const params = body.actions[0].selected_option.value.split('/')
-
-  const [selectedOption, optionArg] = [params[0], params[1]]
-  switch (selectedOption) {
-    case "delete_meeting": {
-        Meeting.deleteScheduled(app, optionArg, {body, context})
-      break
-    }
-    case "edit_meeting": {
-        Meeting.edit(app, optionArg, {body,context})
-      break
-    }
-  }
-})
+const app = Yappy(expressReceiver);
 
 /*
   ========== Exported Functions ==========
 */
 
-exports.slack = functions.runWith({memory: '2GB'}).https.onRequest(async (req, res) => {
-  console.log('started server')
-  expressReceiver.app(req, res);
-});
+exports.slack = functions
+  .runWith({ memory: "2GB" })
+  .https.onRequest(async (req, res) => {
+    console.log("started server");
+    app.receiver.app(req, res);
+  });
 
-exports.scheduledFunction = functions.runWith({
-  timeoutSeconds: 60
-}).pubsub.schedule('* * * * *').onRun(async context => {
+exports.scheduledFunction = functions
+  .runWith({
+    timeoutSeconds: 60,
+  })
+  .pubsub.schedule("* * * * *")
+  .onRun(async (context) => {
+    const utcTime = moment().clone().utc().format("HH:mm");
+    const ref = admin.database().ref("scheduled_sessions");
+    ref.once("value", async (data) => {
+      const workspaces = data.val();
 
-  const utcTime = moment().clone().utc().format('HH:mm')
-  const ref = admin.database().ref('scheduled_sessions')
-  ref.once('value', async (data) => {
-    const workspaces = data.val()
-
-    for (const ws in workspaces){
-      const workspaceSessions = workspaces[ws]
-      for (const session in workspaceSessions) {
-        if (session == utcTime){
-          sendMessagesToWorkspaces(app, ws)
-        }
-      }
-
-      const sessionsRef = await admin.database()
-        .ref(`sessions/${ws}`)
-
-      sessionsRef.once("value", async data => {
-        const wsSessions = data.val()
-        if (wsSessions){
-          for (const session of Object.entries(wsSessions)){
-            const now = moment.utc().unix()
-            const start = session[1].timestamps.ts_start
-            const end = session[1].timestamps.ts_end
-            await admin.database().ref(`installations/${ws}`).once("value", async data => {
-              const workspace = data.val()
-              if (end <=  now && session[1].status != 'ended'){
-                Meeting.end(app, {workspace: workspace, session: session})
-              }
-              else if (session[1].status == 'pending' && now >= start + TIMEOUT/1000 && end >= now){
-                console.log('session '+session[0]+' started')
-                await admin.database().ref(`sessions/${ws}/${session[0]}/status`).set('in progress')
-                .then(async result => {
-                  const users = session[1].users
-                  Meeting.start(app, {workspace: workspace, users: users, sessionId: session[0]})
-                })
-              }
-            })
+      for (const ws in workspaces) {
+        const workspaceSessions = workspaces[ws];
+        for (const session in workspaceSessions) {
+          if (session == utcTime) {
+            sendMessagesToWorkspaces(app, ws);
           }
         }
-      })
-    }
-  })
-});
+
+        const sessionsRef = await admin.database().ref(`sessions/${ws}`);
+
+        sessionsRef.once("value", async (data) => {
+          const wsSessions = data.val();
+          if (wsSessions) {
+            for (const session of Object.entries(wsSessions)) {
+              const now = moment.utc().unix();
+              const start = session[1].timestamps.ts_start;
+              const end = session[1].timestamps.ts_end;
+              await admin
+                .database()
+                .ref(`installations/${ws}`)
+                .once("value", async (data) => {
+                  const workspace = data.val();
+                  if (end <= now && session[1].status != "ended") {
+                    Meeting.end(app, {
+                      workspace: workspace,
+                      session: session,
+                    });
+                  } else if (
+                    session[1].status == "pending" &&
+                    now >= start + TIMEOUT / 1000 &&
+                    end >= now
+                  ) {
+                    console.log("session " + session[0] + " started");
+                    await admin
+                      .database()
+                      .ref(`sessions/${ws}/${session[0]}/status`)
+                      .set("in progress")
+                      .then(async (result) => {
+                        const users = session[1].users;
+                        Meeting.start(app, {
+                          workspace: workspace,
+                          users: users,
+                          sessionId: session[0],
+                        });
+                      });
+                  }
+                });
+            }
+          }
+        });
+      }
+    });
+  });
 
 exports.test = functions.https.onRequest(async (request, response) => {
   await sendMessagesToWorkspaces();
@@ -190,20 +107,20 @@ exports.test = functions.https.onRequest(async (request, response) => {
 });
 
 exports.oauth = functions.https.onRequest(async (request, response) => {
-  console.log("Requested OAuth Flow...")
+  console.log("Requested OAuth Flow...");
 
   if (request.method !== "GET") {
     console.error(`Got unsupported ${request.method} request. Expected GET.`);
     return response.send(405, "Only GET requests are accepted");
   }
 
-  console.log("Checking params...")
+  console.log("Checking params...");
 
   if (!request.query && !request.query.code) {
-      return response.status(401).send("Missing query attribute 'code'");
+    return response.status(401).send("Missing query attribute 'code'");
   }
 
-  console.log("Request is ok, initiating handshake...")
+  console.log("Request is ok, initiating handshake...");
 
   const options = {
     uri: "https://slack.com/api/oauth.v2.access",
@@ -213,36 +130,45 @@ exports.oauth = functions.https.onRequest(async (request, response) => {
       code: request.query.code,
       client_id: functions.config().slack.client_id,
       client_secret: functions.config().slack.client_secret,
-      redirect_uri: "https://us-central1-yappy-79985.cloudfunctions.net/oauth"
-    }
+      redirect_uri: "https://us-central1-yappy-79985.cloudfunctions.net/oauth",
+    },
   };
 
   const result = await rp(options);
   if (!result.ok) {
     console.error("The request was not ok: " + JSON.stringify(result));
-    return response.header("Location", 'https://yappy-79985.web.app').send(302);
+    return response.header("Location", "https://yappy-79985.web.app").send(302);
   }
 
-  console.log("OAuth Success!")
-  console.log(result)
+  console.log("OAuth Success!");
+  console.log(result);
 
-  console.log('Sending onboarding message')
-  await onboarding.sendGroupMessage(result)
-  
-  await admin.database().ref("installations").child(result.team.id).set({
-    token: result.access_token,
-    team: {
-      id: result.team.id,
-      name: result.team.name
-    },
-    bot_user_id: result.bot_user_id,
-    webhook: {
+  console.log("Sending onboarding message");
+  await onboarding.sendGroupMessage(result);
+
+  await admin
+    .database()
+    .ref("installations")
+    .child(result.team.id)
+    .set({
+      token: result.access_token,
+      team: {
+        id: result.team.id,
+        name: result.team.name,
+      },
+      bot_user_id: result.bot_user_id,
+      webhook: {
         url: result.incoming_webhook.url,
         channel: result.incoming_webhook.channel,
-        channel_id: result.incoming_webhook.channel_id
-    }
-  });
+        channel_id: result.incoming_webhook.channel_id,
+        bot_id: result.incoming_webhook.configuration_url.substr(
+          result.incoming_webhook.configuration_url.lastIndexOf("/") + 1
+        ),
+      },
+    });
 
-  console.log("A new workspace installed Yappy!")
-  response.header("Location", 'https://yappy-79985.web.app/success.html').send(302);
+  console.log("A new workspace installed Yappy!");
+  response
+    .header("Location", "https://yappy-79985.web.app/success.html")
+    .send(302);
 });
