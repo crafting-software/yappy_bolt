@@ -101,6 +101,44 @@ exports.scheduledFunction = functions
     });
   });
 
+exports.userPresenceTracker = functions
+  .runWith({
+    timeoutSeconds: 60,
+  })
+  .pubsub.schedule("* * * * *")
+  .onRun(async (context) => {
+    let workspaceList;
+    //Fetch workspace data to get tokens
+    await admin
+      .database()
+      .ref("installations")
+      .once("value", async (data) => {
+        workspaceList = data.val();
+      });
+
+    //Fetch all users
+    await admin
+      .database()
+      .ref("users")
+      .once("value", async (data) => {
+        const users = data.val();
+        for (const workspaceId in workspaceList) {
+          const token = workspaceList[workspaceId].token;
+          for (const userId in users[workspaceId]) {
+            //fetch user presence per workspace
+            const status = await app.client.users.getPresence({
+              token: token,
+              user: userId,
+            });
+            await admin
+              .database()
+              .ref(`users/${workspaceId}/${userId}/presence`)
+              .set(status.presence);
+          }
+        }
+      });
+  });
+
 exports.test = functions.https.onRequest(async (request, response) => {
   await sendMessagesToWorkspaces();
   return null;

@@ -1,42 +1,21 @@
 const admin = require("firebase-admin");
 
 const getSubscribedUsers = async function (app, workspace) {
+  let usersRef = await admin.database().ref(`users/${workspace.team.id}`);
+  let usersList = [];
+  await usersRef.once("value", async function (data) {
+    const list = Object.entries(data.val());
+    usersList = list;
+  });
 
-    let usersRef = await admin.database()
-      .ref(`users/${workspace.team.id}`)
+  return usersList
+    .filter((user) => user[1].presence == "active")
+    .map((users) => users[1]);
+};
 
-    const userPromises = await usersRef.once("value", async function(data){
-      return data.val()
-    })
-    .then(users => Object.entries(users.val())
-      .map(async user => await app.client.users.info({
-        token: workspace.token,
-        user: user[0]
-      })))
+const getInstantYapUsers = async (app, workspace, users) =>
+  await getSubscribedUsers(app, workspace).then((list) => {
+    return list.filter((user) => users.includes(user.id));
+  });
 
-    const onlineUsers = await Promise.all(userPromises)
-      .then(async users => {
-        for (let user of users) {
-          const status = await app.client.users.getPresence({
-            token: workspace.token,
-            user: user.user.id
-          })
-          user.user.status = status.presence
-        }
-        return users
-      })
-      .then(users => users
-        .map(user => user.user)
-        .filter(user => user.status == 'active'))
-
-    console.log("Retrieved users list for:", workspace)
-
-    console.log(`Active users in ${workspace.team.name} : ${onlineUsers.length}`)
-
-    return onlineUsers
-  }
-
-const getInstantYapUsers = async (app,workspace,users) => await getSubscribedUsers(app,workspace)
-  .then(list => list.filter(user => users.includes(user.id)))
-
-module.exports = { getSubscribedUsers, getInstantYapUsers }
+module.exports = { getSubscribedUsers, getInstantYapUsers };

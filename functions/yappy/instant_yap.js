@@ -14,18 +14,20 @@ const instantYapOptions = async (app, state) => {
       workspace = data.val();
     });
 
-  const selectValues = await getSubscribedUsers(app, workspace).then((users) =>
-    Object.entries(users)
-      .filter((user) => user[1].id != state.initiatorId)
-      .map((user) => {
-        return {
-          text: {
-            type: "plain_text",
-            text: user[1].name,
-          },
-          value: `user/${user[1].id}`,
-        };
-      })
+  const selectValues = await getSubscribedUsers(app, workspace).then(
+    (users) => {
+      return users
+        .filter((user) => user.id != state.initiatorId)
+        .map((user) => {
+          return {
+            text: {
+              type: "plain_text",
+              text: user.name,
+            },
+            value: `user/${user.id}`,
+          };
+        });
+    }
   );
 
   return selectValues;
