@@ -14,7 +14,8 @@ const instantYapOptions = async (app, state) => {
       workspace = data.val();
     });
 
-  const selectValues = await getSubscribedUsers(app, workspace).then(
+  const presenceSymbol = (user) => (user.presence == "active" ? "•" : "○");
+  const selectValues = await getSubscribedUsers(app, workspace, false).then(
     (users) => {
       return users
         .filter((user) => user.id != state.initiatorId)
@@ -22,7 +23,7 @@ const instantYapOptions = async (app, state) => {
           return {
             text: {
               type: "plain_text",
-              text: user.name,
+              text: `${user.name} ${presenceSymbol(user)}  (${user.presence})`,
             },
             value: `user/${user.id}`,
           };

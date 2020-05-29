@@ -195,10 +195,17 @@ const end = async (app, { workspace, session }) => {
 
 const instant = async (app, { ack, body, context }) => {
   await ack();
+
+  if (
+    body.view.state.values.instant_yap_input.yappy_select_users.selected_options
+      .value == "user/null"
+  )
+    return;
+
   const users = body.view.state.values.instant_yap_input.yappy_select_users.selected_options.map(
     (element) => element.value.split("/")[1]
   );
-  console.log(users);
+
   sendMessagesToWorkspaces(app, body.team.id, {
     initiatorId: body.user.id,
     recipients: [...users, body.user.id],
@@ -214,7 +221,7 @@ const start = async (app, { workspace, users, sessionId }) => {
     });
   }
   const idList = Object.keys(users);
-  await getSubscribedUsers(app, workspace)
+  await getSubscribedUsers(app, workspace, false)
     .then((list) => list.filter((user) => idList.includes(user.id)))
     .then(async (list) => {
       sendMeetingLinksToWorkspace(app, {
