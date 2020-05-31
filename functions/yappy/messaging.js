@@ -49,7 +49,11 @@ async function sendMeetingLinksToWorkspace(
       for (let group of groups) {
         let meeting_group_id = v4().replace(/-/g, "");
         let meeting_url = `https://8x8.vc/440607796/${meeting_group_id}`;
-        ongoingMeetings.push({ url: meeting_url, users: group });
+        ongoingMeetings.push({
+          url: meeting_url,
+          users: group,
+          expired: false,
+        });
 
         for (let user of group) {
           const result = app.client.chat
@@ -57,11 +61,10 @@ async function sendMeetingLinksToWorkspace(
               token: workspace.token,
               channel: user.id,
               text: "Time to join your yapping meeting.",
-              blocks: JoinMessage(
-                meeting_url,
-                group,
-                "Don't hold back. Join others to start yapping."
-              ),
+              blocks: JoinMessage(meeting_url, group, {
+                message: "Don't hold back. Join others to start yapping.",
+                expired: false,
+              }),
             })
             .then(async (message) => {
               const channel = message.channel;

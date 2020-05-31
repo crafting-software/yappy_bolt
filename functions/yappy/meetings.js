@@ -8,6 +8,7 @@ const {
 const { getSubscribedUsers } = require("./users");
 
 const { HomeView } = require("../view/app_home");
+const { JoinMessage } = require("../view/join_message");
 const { ScheduleMeetingModal } = require("../view/schedule_meeting_modal");
 const { SessionListMessage } = require("../view/session_list");
 
@@ -133,15 +134,36 @@ const deleteScheduled = async (app, optionArg, { body, context }) => {
 };
 
 const end = async (app, { workspace, session }) => {
-  for (const user of Object.entries(session[1].users || {})) {
+  let allUsers;
+  await admin
+    .database()
+    .ref(`users/${workspace.team.id}`)
+    .once("value", async (data) => {
+      allUsers = data.val();
+    });
+  const sessionUsers = Object.entries(session[1].users || {});
+  for (const user of sessionUsers) {
     //If user was in that conversation, remove message with join link.
+    const recipients = Object.entries(allUsers)
+      .filter((member) => session[1].users.hasOwnProperty(member[0]))
+      .map((recipient) => recipient[1]);
+
+    console.log("recipients", recipients);
     if (user[1].response == "accepted") {
       await app.client.chat.update({
         token: workspace.token,
         channel: user[1].channel,
         ts: user[1].ts,
         text: "This session has ended.",
-        blocks: [],
+        blocks: JoinMessage(
+          user[1].group.meeting_link,
+          recipients.filter(
+            (rec) => session[1].users[rec.id].response == "accepted"
+          ),
+          {
+            expired: true,
+          }
+        ),
       });
     }
 
@@ -158,31 +180,40 @@ const end = async (app, { workspace, session }) => {
             .once("value", async (data) => {
               userData = data.val();
             });
-          const activeSessions = Object.entries(data.val()).filter(
-            (session) => session[1].status != "ended"
-          );
+          const activeSessions = Object.entries(data.val());
           const inviteLinks = activeSessions.map((session) => {
             urls = [
               ...new Set(
-                Object.entries(session[1].users).map(
-                  (user) => user[1].group.meeting_links
+                Object.entries(session[1].users || {}).map(
+                  (user) => user[1].group && user[1].group.meeting_link
                 )
               ),
             ];
+
             return urls.map((url) => {
               return {
                 url: url,
-                users: userData.filter((u) => u.id == user[0]),
+                users: Object.entries(userData)
+                  .map((user) => user[1])
+                  .filter((user) => {
+                    const userFromSession = session[1].users[user.id];
+                    return (
+                      userFromSession &&
+                      userFromSession.group &&
+                      userFromSession.group.meeting_link == url
+                    );
+                  }),
+                expired: session[1].status == "ended",
               };
             });
           });
-
+          console.log("users list", JSON.stringify(...inviteLinks));
           await app.client.chat.update({
             token: workspace.token,
             channel: user[1].channel,
             ts: user[1].ts,
             text: " ",
-            blocks: SessionListMessage(inviteLinks),
+            blocks: SessionListMessage(...inviteLinks),
           });
         });
     }
