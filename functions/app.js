@@ -17,14 +17,6 @@ module.exports.Yappy = (expressReceiver) => {
   });
 
   app.error(console.log);
-  app.command("/echo-from-firebase", async ({ command, ack, say }) => {
-    // Acknowledge command request
-    console.log(functions.config().firebase);
-    console.log("Requesting Echo Test");
-    await ack();
-
-    await say(`${command.text}`);
-  });
 
   app.view("yappy_create_instant_yap", async (resp) => {
     await Meeting.instant(app, resp);
