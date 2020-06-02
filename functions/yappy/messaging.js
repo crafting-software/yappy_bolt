@@ -12,8 +12,8 @@ const { MessageHeadsup } = require("../view/message_heads_up");
 const { SessionListMessage } = require("../view/session_list");
 
 const MINUTE = 60000;
-const TIMEOUT = MINUTE * 1;
-const SESSION_DURATION = MINUTE * 1;
+const TIMEOUT = MINUTE * 5;
+const SESSION_DURATION = MINUTE * 10;
 const GROUP_SIZE = 3;
 
 async function sendMeetingLinksToWorkspace(
