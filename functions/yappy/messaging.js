@@ -40,8 +40,11 @@ async function sendMeetingLinksToWorkspace(
       ),
       maybe: users.filter((user) => !userResponses[user.id].response),
     };
-    console.log(userLists);
-    if (userLists.accepted.length) {
+    console.log(JSON.stringify(userLists));
+    if (
+      (userLists.accepted.length == 1 && userLists.maybe.length) ||
+      userLists.accepted.length > 1
+    ) {
       const groups = splitToChunks(userLists.accepted, GROUP_SIZE);
       console.log("Sending meeting links to groups...");
       const ongoingMeetings = [];
@@ -116,7 +119,13 @@ async function sendMeetingLinksToWorkspace(
             });
         }
       }
-    } else console.log("Nobody");
+    } else {
+      console.log("workspace", workspace.team.id, "meeting", meetingId);
+      await admin
+        .database()
+        .ref(`sessions/${workspace.team.id}/${meetingId}`)
+        .remove();
+    }
   });
 }
 
@@ -142,10 +151,20 @@ async function sendMessagesToWorkspaces(
       const ts_start = moment.utc().unix();
       const ts_end = ts_start + (TIMEOUT + SESSION_DURATION) / 1000;
 
-      if (users.length)
+      if (users.length) {
         db.ref(
           `sessions/${workspace.team.id}/${meeting_request_id}/status`
         ).set("pending");
+
+        const sessionType = initiatorId ? "instant yap" : "scheduled session";
+        db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/type`).set(
+          sessionType
+        );
+        if (sessionType == "instant yap")
+          db.ref(
+            `sessions/${workspace.team.id}/${meeting_request_id}/initiator_id`
+          ).set(initiatorId);
+      }
       for (const user of users) {
         const isInitiator = user.id == initiatorId;
         if (isInitiator) {
