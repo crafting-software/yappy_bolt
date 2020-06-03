@@ -235,10 +235,9 @@ async function requestUserFeedback(app, { body, context }) {
     feedbackRequest.bot_profile &&
     feedbackRequest.text == FeedbackRequestMessage.text
   ) {
-    console.log("feedback");
     const feedbackRef = await admin
       .database()
-      .ref("feedback")
+      .ref(`feedback/${body.team_id}`)
       .push(userFeedback.text);
     console.log("Feedback sent");
 
