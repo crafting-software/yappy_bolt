@@ -51,7 +51,9 @@ async function sendMeetingLinksToWorkspace(
 
       for (let group of groups) {
         let meeting_group_id = v4().replace(/-/g, "");
-        let meeting_url = `https://8x8.vc/440607796/${meeting_group_id}`;
+        let meeting_url = encodeURI(
+          `https://8x8.vc/${meeting_group_id}/${workspace.team.name}`
+        );
         ongoingMeetings.push({
           url: meeting_url,
           users: group,
