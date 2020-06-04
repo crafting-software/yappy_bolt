@@ -160,6 +160,7 @@ const end = async (app, { workspace, session }) => {
             (rec) => session[1].users[rec.id].response == "accepted"
           ),
           {
+            message: "Don't hold back. Join others to start yapping.",
             expired: true,
           }
         ),

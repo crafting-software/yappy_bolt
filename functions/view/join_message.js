@@ -9,11 +9,7 @@ const userAvatars = (users) =>
 
 module.exports.JoinMessage = (meeting_url, recipients, args = {}) => {
   const expired = args.expired || false;
-  const message = args.expired
-    ? "This session has ended."
-    : args.message
-    ? args.message
-    : " ";
+  const message = args.message || " ";
 
   const actions = {
     type: "actions",
@@ -57,7 +53,7 @@ module.exports.JoinMessage = (meeting_url, recipients, args = {}) => {
         {
           type: "plain_text",
           emoji: true,
-          text: !expired ? "happening now" : " ",
+          text: !expired ? "happening now" : "This session has ended.",
         },
       ],
     },
