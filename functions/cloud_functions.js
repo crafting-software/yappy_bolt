@@ -42,7 +42,6 @@ const sessionManager = (app) => {
             .add(parsedSessionStartTime[1] + DURATION_MIN, "minutes")
             .format("HH:mm");
           if (utcTime == publishTime) {
-            // console.log("report: ", JSON.stringify(Report(workspace.team.id)));
             await app.client.chat.postMessage({
               token: workspace.token,
               channel: workspace.webhook.channel_id,

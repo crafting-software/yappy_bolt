@@ -1,6 +1,5 @@
 const moment = require("moment");
 const admin = require("firebase-admin");
-const { report } = require("../view/report");
 
 const prepareReport = async (workspaceId) => {
   const startOfDay = moment.utc().startOf("D").unix();
@@ -22,6 +21,7 @@ const prepareReport = async (workspaceId) => {
   return sessionsSnapshot
     .filter(
       (session) =>
+        session[1].type == "scheduled session" &&
         session[1].timestamps &&
         session[1].timestamps.ts_start >= startOfDay &&
         session[1].timestamps.ts_end <= endOfDay
@@ -62,13 +62,4 @@ const prepareReport = async (workspaceId) => {
     });
 };
 
-const postReport = async (app, workspace) => {
-  await app.client.chat.postMessage({
-    token: workspace.token,
-    channel: workspace.channel,
-    text: "Here's the daily report.",
-    blocks: report(workspace.id),
-  });
-};
-
-module.exports = { prepareReport, postReport };
+module.exports = { prepareReport };
