@@ -2,10 +2,13 @@ const admin = require("firebase-admin");
 const rp = require("request-promise");
 const functions = require("firebase-functions");
 const moment = require("moment");
-
+const { parseTime } = require("./utils");
+const { Report } = require("./view/report");
 const { Meeting } = require("./yappy/meetings");
-const { TIMEOUT, sendMessagesToWorkspaces } = require("./yappy/messaging");
+const { sendMessagesToWorkspaces } = require("./yappy/messaging");
 const { onboarding } = require("./yappy/onboarding");
+const { SESSION_DURATION, TIMEOUT, MINUTE } = require("./yappy/timers");
+const DURATION_MIN = SESSION_DURATION / MINUTE;
 
 const sessionManager = (app) => {
   const utcTime = moment().clone().utc().format("HH:mm");
@@ -14,10 +17,39 @@ const sessionManager = (app) => {
     const workspaces = data.val();
 
     for (const ws in workspaces) {
-      const workspaceSessions = workspaces[ws];
-      for (const session in workspaceSessions) {
-        if (session == utcTime) {
+      let workspace;
+      await admin
+        .database()
+        .ref(`installations/${ws}`)
+        .once("value", async (data) => {
+          workspace = data.val();
+        });
+
+      console.log(JSON.stringify(workspace));
+      const workspaceSessions = Object.entries(workspaces[ws]);
+      for (const session of workspaceSessions) {
+        if (session[0] == utcTime) {
           sendMessagesToWorkspaces(app, ws);
+        } else if (
+          workspaceSessions.indexOf(session) ==
+          workspaceSessions.length - 1
+        ) {
+          const parsedSessionStartTime = parseTime(session[0]);
+          const publishTime = moment()
+            .utc()
+            .startOf("D")
+            .add(parsedSessionStartTime[0], "hours")
+            .add(parsedSessionStartTime[1] + DURATION_MIN, "minutes")
+            .format("HH:mm");
+          if (utcTime == publishTime) {
+            // console.log("report: ", JSON.stringify(Report(workspace.team.id)));
+            await app.client.chat.postMessage({
+              token: workspace.token,
+              channel: workspace.webhook.channel_id,
+              text: "Here's the daily report.",
+              blocks: await Report(workspace.team.id),
+            });
+          }
         }
       }
 
@@ -30,36 +62,31 @@ const sessionManager = (app) => {
             const now = moment.utc().unix();
             const start = session[1].timestamps.ts_start;
             const end = session[1].timestamps.ts_end;
-            await admin
-              .database()
-              .ref(`installations/${ws}`)
-              .once("value", async (data) => {
-                const workspace = data.val();
-                if (end <= now && session[1].status != "ended") {
-                  Meeting.end(app, {
-                    workspace: workspace,
-                    session: session,
-                  });
-                } else if (
-                  session[1].status == "pending" &&
-                  now >= start + TIMEOUT / 1000 &&
-                  end >= now
-                ) {
-                  console.log("session " + session[0] + " started");
-                  await admin
-                    .database()
-                    .ref(`sessions/${ws}/${session[0]}/status`)
-                    .set("in progress")
-                    .then(async (result) => {
-                      const users = session[1].users;
-                      Meeting.start(app, {
-                        workspace: workspace,
-                        users: users,
-                        sessionId: session[0],
-                      });
-                    });
-                }
+
+            if (end <= now && session[1].status != "ended") {
+              Meeting.end(app, {
+                workspace: workspace,
+                session: session,
               });
+            } else if (
+              session[1].status == "pending" &&
+              now >= start + TIMEOUT / 1000 &&
+              end >= now
+            ) {
+              console.log("session " + session[0] + " started");
+              await admin
+                .database()
+                .ref(`sessions/${ws}/${session[0]}/status`)
+                .set("in progress")
+                .then(async (result) => {
+                  const users = session[1].users;
+                  Meeting.start(app, {
+                    workspace: workspace,
+                    users: users,
+                    sessionId: session[0],
+                  });
+                });
+            }
           }
         }
       });

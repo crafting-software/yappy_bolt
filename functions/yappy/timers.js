@@ -1,0 +1,5 @@
+const MINUTE = 60000;
+const TIMEOUT = MINUTE * 5;
+const SESSION_DURATION = MINUTE * 10;
+
+module.exports = { MINUTE, TIMEOUT, SESSION_DURATION };

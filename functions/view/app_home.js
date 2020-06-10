@@ -1,6 +1,7 @@
 const admin = require("firebase-admin");
 const { NewSessionControls } = require("./components/new_sessions");
 const { ScheduledSessions } = require("./components/scheduled_sessions");
+const { report } = require("./report");
 
 exports.HomeView = async (user) => {
   let userIsRegistered = await admin

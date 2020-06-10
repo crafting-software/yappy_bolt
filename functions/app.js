@@ -2,7 +2,7 @@ const functions = require("firebase-functions");
 
 const { App } = require("@slack/bolt");
 const { HomeView } = require("./view/app_home");
-
+const { report } = require("./view/report");
 const { Meeting, RSVP } = require("./yappy/meetings");
 const { optIn, optOut } = require("./yappy/register");
 const { requestUserFeedback } = require("./yappy/messaging");

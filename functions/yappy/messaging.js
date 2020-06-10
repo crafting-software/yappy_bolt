@@ -158,6 +158,13 @@ async function sendMessagesToWorkspaces(
           `sessions/${workspace.team.id}/${meeting_request_id}/status`
         ).set("pending");
 
+        await db
+          .ref(`sessions/${workspace.team.id}/${meeting_request_id}/timestamps`)
+          .set({
+            ts_start: ts_start,
+            ts_end: ts_end,
+          });
+
         const sessionType = initiatorId ? "instant yap" : "scheduled session";
         db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/type`).set(
           sessionType
@@ -212,13 +219,6 @@ async function sendMessagesToWorkspaces(
             });
         }
       }
-
-      await db
-        .ref(`sessions/${workspace.team.id}/${meeting_request_id}/timestamps`)
-        .set({
-          ts_start: ts_start,
-          ts_end: ts_end,
-        });
     }
   });
 }
