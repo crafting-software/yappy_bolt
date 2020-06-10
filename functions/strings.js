@@ -1,3 +1,5 @@
+const { Timers } = require("./yappy/constants");
+
 const messages = [
   "Get ready to yap. Sit up, stretch your legs, arms and your jaw.",
   "Your colleagues need you for a yap task.",
@@ -15,11 +17,11 @@ const messages = [
 
 module.exports.getRandomMessage = () =>
   messages[Math.floor(Math.random() * messages.length)];
-module.exports.instantYapMessage = (
-  initiatorId,
-  timeout
-) => `<@${initiatorId}> invited you to an instant yap!\nThe session \
-will start ${timeout} minutes from now. What do you say?`;
+module.exports.instantYapMessage = (initiatorId) =>
+  `<@${initiatorId}> invited you to an instant yap!\nThe session \
+will start ${
+    Timers.TIMEOUT / Timers.MINUTE
+  } minutes from now. What do you say?`;
 module.exports.yappyOnboardingMessageText = (params = {}) =>
   (params.notify ? "#here " : "") +
   "Hello! Let me introduce myself.\

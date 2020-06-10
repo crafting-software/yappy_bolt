@@ -1,4 +1,4 @@
-const { TIMEOUT } = require("../yappy/timers");
+const { Timers } = require("../yappy/constants");
 const { prepareReport } = require("../yappy/report");
 
 const moment = require("moment");
@@ -35,12 +35,11 @@ const row = (users) => {
   ];
 };
 
-const sessionCard = (time, rows) => {
+const sessionCard = (rows) => {
   return [...rows];
 };
 
 const Report = async (workspaceId) => {
-  // console.log("time", now);
   const sessions = await prepareReport(workspaceId);
   const list = [];
   for (const session of sessions) {
@@ -48,14 +47,7 @@ const Report = async (workspaceId) => {
     for (const group of session.groups) {
       groups.push(...row(group.users));
     }
-    list.push(
-      ...sessionCard(
-        `${moment
-          .unix(session.ts_start + TIMEOUT / 1000)
-          .format("HH:mm")} - ${moment.unix(session.ts_end).format("HH:mm")}`,
-        groups
-      )
-    );
+    list.push(...sessionCard(groups));
     if (sessions.indexOf(session) < sessions.length - 1)
       list.push({ type: "divider" });
   }

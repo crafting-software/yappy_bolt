@@ -1,7 +1,7 @@
 const { InstantYapModal } = require("../view/instant_yap_modal");
 const { getSubscribedUsers } = require("../yappy/users");
-const { TIMEOUT, GROUP_SIZE } = require("../yappy/messaging");
-const TIMEOUT_MIN = TIMEOUT / 60000;
+const { Timers } = require("../yappy/constants");
+const TIMEOUT_MIN = Timers.TIMEOUT / Timers.MINUTE;
 
 const admin = require("firebase-admin");
 

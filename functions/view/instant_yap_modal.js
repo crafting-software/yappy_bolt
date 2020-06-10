@@ -1,5 +1,5 @@
-const { TIMEOUT } = require("../yappy/messaging");
-const TIMEOUT_MIN = TIMEOUT / 60000;
+const { Timers } = require("../yappy/constants");
+const TIMEOUT_MIN = Timers.TIMEOUT / Timers.MINUTE;
 
 module.exports.InstantYapModal = async (element = null) => {
   const buttons = {

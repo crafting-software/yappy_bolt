@@ -7,26 +7,25 @@ const { Report } = require("./view/report");
 const { Meeting } = require("./yappy/meetings");
 const { sendMessagesToWorkspaces } = require("./yappy/messaging");
 const { onboarding } = require("./yappy/onboarding");
-const { SESSION_DURATION, TIMEOUT, MINUTE } = require("./yappy/timers");
-const DURATION_MIN = SESSION_DURATION / MINUTE;
+const { Timers } = require("./yappy/constants");
+const DURATION_MIN = Timers.SESSION_DURATION / Timers.MINUTE;
+const TIMEOUT_MIN = Timers.TIMEOUT / Timers.MINUTE;
 
 const sessionManager = (app) => {
   const utcTime = moment().clone().utc().format("HH:mm");
+  let workspaces = [];
+
+  admin
+    .database()
+    .ref("installations")
+    .once("value", async (data) => {
+      workspaces = data.val();
+    });
   const ref = admin.database().ref("scheduled_sessions");
   ref.once("value", async (data) => {
-    const workspaces = data.val();
-
-    for (const ws in workspaces) {
-      let workspace;
-      await admin
-        .database()
-        .ref(`installations/${ws}`)
-        .once("value", async (data) => {
-          workspace = data.val();
-        });
-
-      console.log(JSON.stringify(workspace));
-      const workspaceSessions = Object.entries(workspaces[ws]);
+    const scheduledSessionsLists = data.val();
+    for (const ws in scheduledSessionsLists) {
+      const workspaceSessions = Object.entries(scheduledSessionsLists[ws]);
       for (const session of workspaceSessions) {
         if (session[0] == utcTime) {
           sendMessagesToWorkspaces(app, ws);
@@ -39,48 +38,54 @@ const sessionManager = (app) => {
             .utc()
             .startOf("D")
             .add(parsedSessionStartTime[0], "hours")
-            .add(parsedSessionStartTime[1] + DURATION_MIN, "minutes")
+            .add(
+              parsedSessionStartTime[1] + TIMEOUT_MIN + DURATION_MIN,
+              "minutes"
+            )
             .format("HH:mm");
           if (utcTime == publishTime) {
             await app.client.chat.postMessage({
-              token: workspace.token,
-              channel: workspace.webhook.channel_id,
+              token: workspaces[ws].token,
+              channel: workspaces[ws].webhook.channel_id,
               text: "Here's the daily report.",
-              blocks: await Report(workspace.team.id),
+              blocks: await Report(workspaces[ws].team.id),
             });
           }
         }
       }
+    }
 
-      const sessionsRef = await admin.database().ref(`sessions/${ws}`);
+    const sessionsRef = await admin
+      .database()
+      .ref("sessions")
+      .once("value", async (data) => {
+        const sessionsSnapshot = Object.entries(data.val());
 
-      sessionsRef.once("value", async (data) => {
-        const wsSessions = data.val();
-        if (wsSessions) {
-          for (const session of Object.entries(wsSessions)) {
+        for (const list of sessionsSnapshot) {
+          const sessions = Object.entries(list[1]);
+
+          for (const session of sessions) {
             const now = moment.utc().unix();
             const start = session[1].timestamps.ts_start;
             const end = session[1].timestamps.ts_end;
-
             if (end <= now && session[1].status != "ended") {
               Meeting.end(app, {
-                workspace: workspace,
+                workspace: workspaces[list[0]],
                 session: session,
               });
             } else if (
               session[1].status == "pending" &&
-              now >= start + TIMEOUT / 1000 &&
+              now >= start + Timers.TIMEOUT / 1000 &&
               end >= now
             ) {
-              console.log("session " + session[0] + " started");
               await admin
                 .database()
-                .ref(`sessions/${ws}/${session[0]}/status`)
+                .ref(`sessions/${list[0]}/${session[0]}/status`)
                 .set("in progress")
                 .then(async (result) => {
                   const users = session[1].users;
                   Meeting.start(app, {
-                    workspace: workspace,
+                    workspace: workspaces[list[0]],
                     users: users,
                     sessionId: session[0],
                   });
@@ -89,7 +94,6 @@ const sessionManager = (app) => {
           }
         }
       });
-    }
   });
 };
 

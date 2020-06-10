@@ -5,16 +5,11 @@ const { v4 } = require("uuid");
 const { splitToChunks } = require("../utils");
 const { getRandomMessage, instantYapMessage } = require("../strings");
 const { getSubscribedUsers, getInstantYapUsers } = require("./users");
+const { Timers, GROUP_SIZE } = require("./constants");
 
-const { HomeView } = require("../view/app_home");
 const { JoinMessage } = require("../view/join_message");
 const { MessageHeadsup } = require("../view/message_heads_up");
 const { SessionListMessage } = require("../view/session_list");
-
-const MINUTE = 60000;
-const TIMEOUT = MINUTE * 5;
-const SESSION_DURATION = MINUTE * 10;
-const GROUP_SIZE = 3;
 
 async function sendMeetingLinksToWorkspace(
   app,
@@ -151,7 +146,8 @@ async function sendMessagesToWorkspaces(
         : await getSubscribedUsers(app, workspace);
 
       const ts_start = moment.utc().unix();
-      const ts_end = ts_start + (TIMEOUT + SESSION_DURATION) / 1000;
+      const ts_end =
+        ts_start + (Timers.TIMEOUT + Timers.SESSION_DURATION) / 1000;
 
       if (users.length) {
         db.ref(
@@ -182,7 +178,7 @@ async function sendMessagesToWorkspaces(
               token: workspace.token,
               channel: user.id,
               text: `Your instant meeting starts in ${
-                TIMEOUT / 60000
+                Timers.TIMEOUT / 60000
               } minutes. Stay tuned!`,
             })
             .then((message) => {
@@ -196,7 +192,7 @@ async function sendMessagesToWorkspaces(
             });
         } else {
           const inviteMessage = instantMeetingArgs
-            ? instantYapMessage(initiatorId, TIMEOUT / 60000)
+            ? instantYapMessage(initiatorId)
             : getRandomMessage();
           await app.client.chat
             .postMessage({
@@ -256,6 +252,4 @@ module.exports = {
   sendMeetingLinksToWorkspace,
   sendMessagesToWorkspaces,
   requestUserFeedback,
-  TIMEOUT,
-  GROUP_SIZE,
 };
