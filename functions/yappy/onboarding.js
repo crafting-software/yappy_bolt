@@ -1,9 +1,16 @@
 const admin = require("firebase-admin");
-const { yappyOnboardingMessageText } = require("../strings");
+const {
+  yappyOnboardingMessageText,
+  adminOnboardingMessage,
+} = require("../strings");
 const { YappyOnboardingMessage } = require("../view/yappy_onboarding_message");
+const moment = require("moment");
 const rp = require("request-promise");
 
 async function sendGroupMessage(result) {
+  const adminId = result.authed_user.id; //The admin who installed the app
+  // const teamId = result.team.id;
+
   const token = result.access_token;
   const channel = result.incoming_webhook.channel_id;
   const teamId = result.team.id;
@@ -52,20 +59,61 @@ async function sendGroupMessage(result) {
               actualUsers.push(await rp(userRequest));
             }
             actualUsers = await Promise.all(actualUsers).then((result) => {
-              return result
-                .filter((user) => user.user.is_bot == false)
-                .map((user) => {
-                  return {
-                    id: user.user.id,
-                    avatar: user.user.profile.image_48,
-                    name: user.user.profile.real_name,
-                  };
-                });
-            });
+              const users = result.filter((user) => user.user.is_bot == false);
+              const adminUser = users.find((user) => user.user.id == adminId);
+              const tzOffset = adminUser.user.tz_offset;
 
-            for (const user of actualUsers) {
-              admin.database().ref(`users/${teamId}/${user.id}`).set(user);
-            }
+              const tzOffsetHours = tzOffset / 3600;
+
+              const firstSession = (type = "utc") =>
+                moment
+                  .utc()
+                  .startOf("D")
+                  .add(12 - (type == "local" ? 0 : tzOffsetHours), "hour")
+                  .format("HH:mm");
+
+              admin
+                .database()
+                .ref(`scheduled_sessions/${teamId}/${firstSession()}`)
+                .set({
+                  created_by: {
+                    name: "Yappy",
+                    at: moment.utc().unix(),
+                  },
+                  utc_time: firstSession(),
+                });
+
+              for (const user of actualUsers) {
+                const isAdmin = user.user.isAdmin;
+                const tzOffset = user.user.tz_offset;
+                const id = user.user.id;
+                const avatar = user.user.profile.image_48;
+                const name = user.user.profile.real_name;
+
+                admin.database().ref(`users/${teamId}/${id}`).set({
+                  id: id,
+                  avatar: avatar,
+                  tz_offset: tzOffset,
+                  name: name,
+                });
+
+                if (user.user.is_admin) {
+                  rp({
+                    uri: "https://slack.com/api/chat.postMessage",
+                    method: "GET",
+                    json: true,
+                    qs: {
+                      token: token,
+                      channel: id,
+                      text: adminOnboardingMessage({
+                        accountId: id,
+                        time: firstSession("local"),
+                      }),
+                    },
+                  });
+                }
+              }
+            });
           })
           .then(async (result) => {
             const status = await rp(postMessageRequestOptions);

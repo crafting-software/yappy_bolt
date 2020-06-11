@@ -159,13 +159,14 @@ const oauth = async (request, response) => {
   };
 
   const result = await rp(options);
+
   if (!result.ok) {
     console.error("The request was not ok: " + JSON.stringify(result));
     return response.header("Location", "https://yappy-79985.web.app").send(302);
   }
 
   console.log("OAuth Success!");
-  console.log(result);
+  console.log(JSON.stringify(result));
 
   console.log("Sending onboarding message");
   await onboarding.sendGroupMessage(result);
