@@ -76,10 +76,8 @@ async function sendGroupMessage(result) {
                 .database()
                 .ref(`scheduled_sessions/${teamId}/${firstSession()}`)
                 .set({
-                  created_by: {
-                    name: "Yappy",
-                    at: moment.utc().unix(),
-                  },
+                  scheduler_name: "Yappy",
+                  created_at: moment.utc().unix(),
                   utc_time: firstSession(),
                 });
 

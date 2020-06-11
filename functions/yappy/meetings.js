@@ -67,9 +67,9 @@ const submit = async (app, { ack, body, view, context }) => {
       .database()
       .ref(`scheduled_sessions/${body.team.id}/${utcTime}`)
       .set({
-        tz: tz,
         utc_time: utcTime,
-        tz_offset: tz_offset,
+        scheduler_id: user.user.id,
+        created_at: moment.utc().unix(),
       });
   }
 
