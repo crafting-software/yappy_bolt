@@ -5,7 +5,13 @@ const { v4 } = require("uuid");
 const { splitToChunks } = require("../utils");
 const { getRandomMessage, instantYapMessage } = require("../strings");
 const { getSubscribedUsers, getInstantYapUsers } = require("./users");
-const { Timers, GROUP_SIZE } = require("./constants");
+const {
+  Timers,
+  GROUP_SIZE,
+  SessionStatus,
+  SessionTypes,
+  UserResponses,
+} = require("./constants");
 
 const { JoinMessage } = require("../view/join_message");
 const { MessageHeadsup } = require("../view/message_heads_up");
@@ -19,21 +25,21 @@ async function sendMeetingLinksToWorkspace(
     .database()
     .ref(`sessions/${workspace.team.id}/${meetingId}/users`);
   ref.once("value", async function (data) {
-    const userResponses = data.val() || [];
-    console.log("User responses", userResponses);
+    const responses = data.val() || [];
+    console.log("User responses", responses);
 
     const userLists = {
       accepted: users.filter(
         (user) =>
-          userResponses[user.id] &&
-          userResponses[user.id].response == "accepted"
+          responses[user.id] &&
+          responses[user.id].response == UserResponses.ACCEPTED
       ),
       declined: users.filter(
         (user) =>
-          userResponses[user.id] &&
-          userResponses[user.id].response == "declined"
+          responses[user.id] &&
+          responses[user.id].response == UserResponses.DECLINED
       ),
-      maybe: users.filter((user) => !userResponses[user.id].response),
+      maybe: users.filter((user) => !responses[user.id].response),
     };
     console.log(JSON.stringify(userLists));
     if (
@@ -152,7 +158,7 @@ async function sendMessagesToWorkspaces(
       if (users.length) {
         db.ref(
           `sessions/${workspace.team.id}/${meeting_request_id}/status`
-        ).set("pending");
+        ).set(SessionStatus.PENDING);
 
         await db
           .ref(`sessions/${workspace.team.id}/${meeting_request_id}/timestamps`)
@@ -161,11 +167,13 @@ async function sendMessagesToWorkspaces(
             ts_end: ts_end,
           });
 
-        const sessionType = initiatorId ? "instant yap" : "scheduled session";
+        const sessionType = initiatorId
+          ? SessionTypes.INSTANT
+          : SessionTypes.SCHEDULED;
         db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/type`).set(
           sessionType
         );
-        if (sessionType == "instant yap")
+        if (sessionType == SessionTypes.INSTANT)
           db.ref(
             `sessions/${workspace.team.id}/${meeting_request_id}/initiator_id`
           ).set(initiatorId);
@@ -185,7 +193,7 @@ async function sendMessagesToWorkspaces(
               db.ref(
                 `sessions/${workspace.team.id}/${meeting_request_id}/users/${user.id}`
               ).set({
-                response: "accepted",
+                response: UserResponses.ACCEPTED,
                 headsup_ts: message.ts,
                 channel: message.channel,
               });

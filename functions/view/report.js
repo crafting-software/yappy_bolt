@@ -52,16 +52,18 @@ const Report = async (workspaceId) => {
       list.push({ type: "divider" });
   }
 
-  return [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `*Here's a list of all the sessions that happened today:*`,
-      },
-    },
-    ...list,
-  ];
+  return sessions && sessions.length
+    ? [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*Here's a list of all the sessions that happened today:*`,
+          },
+        },
+        ...list,
+      ]
+    : null;
 };
 
 module.exports = { Report };

@@ -20,6 +20,7 @@ module.exports.optIn = async (app, { ack, say, context, body }) => {
     name: user.user.name,
     id: user.user.id,
     avatar: user.user.profile.image_48,
+    tz_offset: user.user.tz_offset,
   });
 
   const result = await app.client.views.publish({

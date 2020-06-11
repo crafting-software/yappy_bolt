@@ -7,7 +7,12 @@ const { Report } = require("./view/report");
 const { Meeting } = require("./yappy/meetings");
 const { sendMessagesToWorkspaces } = require("./yappy/messaging");
 const { onboarding } = require("./yappy/onboarding");
-const { Timers } = require("./yappy/constants");
+const {
+  Timers,
+  SessionStatus,
+  SessionTypes,
+  UserResponses,
+} = require("./yappy/constants");
 const DURATION_MIN = Timers.SESSION_DURATION / Timers.MINUTE;
 const TIMEOUT_MIN = Timers.TIMEOUT / Timers.MINUTE;
 
@@ -43,13 +48,16 @@ const sessionManager = (app) => {
               "minutes"
             )
             .format("HH:mm");
+
           if (utcTime == publishTime) {
-            await app.client.chat.postMessage({
-              token: workspaces[ws].token,
-              channel: workspaces[ws].webhook.channel_id,
-              text: "Here's the daily report.",
-              blocks: await Report(workspaces[ws].team.id),
-            });
+            const report = await Report(workspaces[ws].team.id);
+            if (report)
+              await app.client.chat.postMessage({
+                token: workspaces[ws].token,
+                channel: workspaces[ws].webhook.channel_id,
+                text: "Here's the daily report.",
+                blocks: report,
+              });
           }
         }
       }
@@ -59,37 +67,48 @@ const sessionManager = (app) => {
       .database()
       .ref("sessions")
       .once("value", async (data) => {
-        const sessionsSnapshot = Object.entries(data.val());
+        const sessionsSnapshot = Object.entries(data.val() || {});
 
         for (const list of sessionsSnapshot) {
-          const sessions = Object.entries(list[1]);
+          const sessions = Object.entries(list[1] || {});
 
           for (const session of sessions) {
             const now = moment.utc().unix();
             const start = session[1].timestamps.ts_start;
             const end = session[1].timestamps.ts_end;
-            if (end <= now && session[1].status != "ended") {
+            if (end <= now && session[1].status != SessionStatus.ENDED) {
               Meeting.end(app, {
                 workspace: workspaces[list[0]],
                 session: session,
               });
             } else if (
-              session[1].status == "pending" &&
+              session[1].status == SessionStatus.PENDING &&
               now >= start + Timers.TIMEOUT / 1000 &&
               end >= now
             ) {
-              await admin
-                .database()
-                .ref(`sessions/${list[0]}/${session[0]}/status`)
-                .set("in progress")
-                .then(async (result) => {
-                  const users = session[1].users;
-                  Meeting.start(app, {
-                    workspace: workspaces[list[0]],
-                    users: users,
-                    sessionId: session[0],
-                  });
+              const accepted = Object.entries(session[1].users).filter(
+                (user) => user[1].response == UserResponses.ACCEPTED
+              );
+
+              console.log("session", JSON.stringify(session));
+              console.log("accepted", JSON.stringify(accepted));
+              const sessionType = session[1].type;
+              if (
+                (sessionType == SessionTypes.SCHEDULED &&
+                  accepted.length > 1) ||
+                sessionType == SessionTypes.INSTANT
+              ) {
+                Meeting.start(app, {
+                  workspace: workspaces[list[0]],
+                  users: session[1].users,
+                  sessionId: session[0],
                 });
+              } else {
+                Meeting.cancel(app, {
+                  workspace: workspaces[list[0]],
+                  session: session,
+                });
+              }
             }
           }
         }
@@ -121,10 +140,20 @@ const userPresenceTracker = async (app) => {
             token: token,
             user: userId,
           });
+
+          let currentUser;
           await admin
             .database()
-            .ref(`users/${workspaceId}/${userId}/presence`)
-            .set(status.presence);
+            .ref(`users/${workspaceId}/${userId}`)
+            .once("value", async (data) => {
+              currentUser = data.val();
+            });
+
+          if (currentUser)
+            await admin
+              .database()
+              .ref(`users/${workspaceId}/${userId}/presence`)
+              .set(status.presence);
         }
       }
     });

@@ -7,6 +7,7 @@ const {
 } = require("./messaging");
 const { getSubscribedUsers } = require("./users");
 
+const { SessionStatus } = require("./constants");
 const { HomeView } = require("../view/app_home");
 const { JoinMessage } = require("../view/join_message");
 const { ScheduleMeetingModal } = require("../view/schedule_meeting_modal");
@@ -133,6 +134,20 @@ const deleteScheduled = async (app, optionArg, { body, context }) => {
   });
 };
 
+const cancel = async (app, args) => {
+  await admin
+    .database()
+    .ref(`sessions/${args.workspace.team.id}/${args.session[0]}`)
+    .remove();
+  for (const user of Object.entries(args.session[1].users)) {
+    app.client.chat.delete({
+      token: args.workspace.token,
+      channel: user[1].channel,
+      ts: user[1].headsup_ts,
+    });
+  }
+};
+
 const end = async (app, { workspace, session }) => {
   let allUsers;
   await admin
@@ -244,6 +259,10 @@ const instant = async (app, { ack, body, context }) => {
 };
 
 const start = async (app, { workspace, users, sessionId }) => {
+  await admin
+    .database()
+    .ref(`sessions/${workspace.team.id}/${sessionId}/status`)
+    .set(SessionStatus.IN_PROGRESS);
   for (const user in users) {
     await app.client.chat.delete({
       token: workspace.token,
@@ -300,4 +319,5 @@ module.exports.Meeting = {
   start,
   end,
   submit,
+  cancel,
 };
