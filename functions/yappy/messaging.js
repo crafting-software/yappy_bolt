@@ -227,37 +227,7 @@ async function sendMessagesToWorkspaces(
   });
 }
 
-async function requestUserFeedback(app, { body, context }) {
-  const channel = body.event.channel;
-  const [userFeedback, feedbackRequest] = await app.client.conversations
-    .history({
-      token: context.botToken,
-      channel: channel,
-      limit: 2,
-    })
-    .then((resp) => resp.messages);
-
-  if (
-    feedbackRequest.bot_profile &&
-    feedbackRequest.text == FeedbackRequestMessage.text
-  ) {
-    const feedbackRef = await admin
-      .database()
-      .ref(`feedback/${body.team_id}`)
-      .push(userFeedback.text);
-    console.log("Feedback sent");
-
-    await app.client.chat.postMessage({
-      token: context.botToken,
-      channel: channel,
-      thread_ts: userFeedback.ts,
-      text: "Feedback sent!",
-    });
-  }
-}
-
 module.exports = {
   sendMeetingLinksToWorkspace,
   sendMessagesToWorkspaces,
-  requestUserFeedback,
 };

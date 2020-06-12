@@ -1,7 +1,7 @@
 const admin = require("firebase-admin");
 const { NewSessionControls } = require("./components/new_sessions");
 const { ScheduledSessions } = require("./components/scheduled_sessions");
-const { report } = require("./report");
+const { FeedbackSection } = require("./components/feedback_section");
 
 exports.HomeView = async (user) => {
   let userIsRegistered = await admin
@@ -53,12 +53,13 @@ exports.HomeView = async (user) => {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "*Yappy*",
+          text: "*Scheduled sessions*",
         },
       },
 
       ...ScheduledSessions(loggedUser, (await scheduledSessions) || []),
       ...NewSessionControls(loggedUser),
+      ...FeedbackSection(user),
 
       //Opt in / out controls
       {

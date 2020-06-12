@@ -3,6 +3,8 @@ const admin = require("firebase-admin");
 const { parseTime } = require("../utils");
 const { HomeView } = require("../view/app_home");
 const { FeedbackRequestMessage } = require("../view/feedback_request_message");
+const { FeedbackModal } = require("../view/feedback_modal");
+const { OptOutMessage } = require("../view/opt_out_message");
 
 module.exports.optIn = async (app, { ack, say, context, body }) => {
   await ack();
@@ -45,10 +47,16 @@ module.exports.optOut = async (app, { ack, payload, context, body }) => {
     view: await HomeView(body.user),
   });
 
+  await app.client.views.open({
+    token: token,
+    trigger_id: body.trigger_id,
+    view: FeedbackModal(),
+  });
+
   await app.client.chat.postMessage({
     token: token,
     channel: userId,
-    text:
-      "Please provide some feedback to improve Yappy.\nYou can do this via direct message.",
+    text: "Sorry to see you go!",
+    blocks: OptOutMessage(),
   });
 };

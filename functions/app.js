@@ -4,11 +4,12 @@ const { App } = require("@slack/bolt");
 const { HomeView } = require("./view/app_home");
 const { Meeting, RSVP } = require("./yappy/meetings");
 const { optIn, optOut } = require("./yappy/register");
-const { requestUserFeedback } = require("./yappy/messaging");
 const { InstantYap } = require("./yappy/instant_yap");
 const { onboarding } = require("./yappy/onboarding");
 const { authorizeFn } = require("./yappy/auth");
 
+const { FeedbackModal } = require("./view/feedback_modal");
+const { sendFeedback } = require("./yappy/feedback");
 module.exports.Yappy = (expressReceiver) => {
   const app = new App({
     receiver: expressReceiver,
@@ -17,16 +18,16 @@ module.exports.Yappy = (expressReceiver) => {
 
   app.error(console.log);
 
+  app.view("yappy_feedback_modal", async (resp) => {
+    await sendFeedback(app, resp);
+  });
+
   app.view("yappy_create_instant_yap", async (resp) => {
     await Meeting.instant(app, resp);
   });
 
   app.view("yappy_submit_meeting", async (resp) => {
     await Meeting.submit(app, resp);
-  });
-
-  app.message("", async (resp) => {
-    await requestUserFeedback(app, resp);
   });
 
   app.event("team_join", async (resp) => {
@@ -56,6 +57,14 @@ module.exports.Yappy = (expressReceiver) => {
     await optOut(app, resp);
   });
 
+  app.action("yappy_send_feedback", async (resp) => {
+    await app.client.views.open({
+      token: resp.context.botToken,
+      trigger_id: resp.body.trigger_id,
+      view: FeedbackModal(),
+    });
+  });
+
   app.action("yappy_message_opt_out", async (resp) => {
     await resp.ack();
     await app.client.chat.delete({
@@ -64,6 +73,16 @@ module.exports.Yappy = (expressReceiver) => {
       channel: resp.body.channel.id,
     });
     await optOut(app, resp);
+  });
+
+  app.action("yappy_message_opt_in", async (resp) => {
+    await resp.ack();
+    await app.client.chat.delete({
+      token: resp.context.botToken,
+      ts: resp.body.message.ts,
+      channel: resp.body.channel.id,
+    });
+    await optIn(app, resp);
   });
 
   app.action("accept_yappy_session", async (resp) => {
