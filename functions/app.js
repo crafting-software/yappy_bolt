@@ -10,6 +10,7 @@ const { authorizeFn } = require("./yappy/auth");
 
 const { FeedbackModal } = require("./view/feedback_modal");
 const { sendFeedback } = require("./yappy/feedback");
+const { updateUserData } = require("./yappy/users");
 module.exports.Yappy = (expressReceiver) => {
   const app = new App({
     receiver: expressReceiver,
@@ -32,6 +33,10 @@ module.exports.Yappy = (expressReceiver) => {
 
   app.event("team_join", async (resp) => {
     await onboarding.sendPrivateMessage(resp);
+  });
+
+  app.event("user_change", async (resp) => {
+    await updateUserData(app, resp);
   });
 
   app.event("app_home_opened", async ({ context, body, event }) => {

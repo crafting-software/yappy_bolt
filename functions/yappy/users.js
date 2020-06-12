@@ -24,4 +24,30 @@ const getInstantYapUsers = async (app, workspace, users) =>
     return list.filter((user) => users.includes(user.id));
   });
 
-module.exports = { getSubscribedUsers, getInstantYapUsers };
+const updateUserData = async (app, args) => {
+  const user = args.event.user;
+  await admin
+    .database()
+    .ref(`users/${user.team_id}/${user.id}`)
+    .once("value", async (data) => {
+      const snapshot = data.val();
+      if (snapshot) {
+        const userData = {
+          name: user.name,
+          avatar: user.profile.image_48,
+          tz_offset: user.tz_offset,
+        };
+
+        for (const key in userData) {
+          if (userData[key] != snapshot[key]) {
+            admin
+              .database()
+              .ref(`users/${user.team_id}/${user.id}/${key}`)
+              .set(userData[key]);
+          }
+        }
+      }
+    });
+};
+
+module.exports = { getSubscribedUsers, updateUserData, getInstantYapUsers };

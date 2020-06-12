@@ -58,7 +58,7 @@ const Report = async (workspaceId) => {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `*Here's a list of all the sessions that happened today:*`,
+            text: `*Your colleagues had so much fun today!*`,
           },
         },
         ...list,
