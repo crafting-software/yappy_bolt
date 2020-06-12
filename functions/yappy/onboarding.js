@@ -59,7 +59,10 @@ async function sendGroupMessage(result) {
               actualUsers.push(await rp(userRequest));
             }
             actualUsers = await Promise.all(actualUsers).then((result) => {
-              const users = result.filter((user) => user.user.is_bot == false);
+              const users = result.filter(
+                (user) =>
+                  user.user.is_bot == false && user.user.deleted == false
+              );
               const adminUser = users.find((user) => user.user.id == adminId);
               const tzOffset = adminUser.user.tz_offset;
 
