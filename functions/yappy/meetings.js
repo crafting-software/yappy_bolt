@@ -157,7 +157,7 @@ const end = async (app, { workspace, session }) => {
       allUsers = data.val();
     });
   const sessionUsers = Object.entries(session[1].users || {});
-  console.log("sessionUsers", JSON.stringify(sessionUsers));
+
   for (const user of sessionUsers) {
     //If user was in that conversation, remove message with join link.
     const recipients = Object.entries(allUsers)

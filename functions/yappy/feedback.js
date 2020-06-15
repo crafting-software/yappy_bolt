@@ -7,7 +7,7 @@ async function sendFeedback(app, { body, context, view, ack }) {
 
   await app.client.chat.postMessage({
     token: context.botToken,
-    channel: channel,
+    channel: body.user.id,
     text: "Thank you for your feedback !",
   });
 }

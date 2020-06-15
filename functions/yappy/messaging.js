@@ -102,7 +102,6 @@ async function sendMeetingLinksToWorkspace(
       }
 
       for (const user of userLists.maybe) {
-        console.log("ONGOING MEETING", JSON.stringify(ongoingMeetings));
         const result = app.client.chat
           .postMessage({
             token: workspace.token,
