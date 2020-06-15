@@ -1,11 +1,15 @@
 const { JoinMessage } = require("./join_message");
 
 module.exports.SessionListMessage = (sessionList) => {
-  const [blocks] = sessionList.map((session) =>
-    JoinMessage(session.url, session.users, {
-      expired: session.expired || false,
-    })
-  );
+  const blocks = [];
+  sessionList.forEach((session) => {
+    return blocks.push(
+      ...JoinMessage(session.url, session.users, {
+        expired: session.expired || false,
+      })
+    );
+  });
+
   return blocks && blocks.length
     ? [
         {

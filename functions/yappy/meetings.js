@@ -7,7 +7,7 @@ const {
 } = require("./messaging");
 const { getSubscribedUsers } = require("./users");
 
-const { SessionStatus } = require("./constants");
+const { SessionStatus, UserResponses } = require("./constants");
 const { HomeView } = require("../view/app_home");
 const { JoinMessage } = require("../view/join_message");
 const { ScheduleMeetingModal } = require("../view/schedule_meeting_modal");
@@ -157,13 +157,14 @@ const end = async (app, { workspace, session }) => {
       allUsers = data.val();
     });
   const sessionUsers = Object.entries(session[1].users || {});
+  console.log("sessionUsers", JSON.stringify(sessionUsers));
   for (const user of sessionUsers) {
     //If user was in that conversation, remove message with join link.
     const recipients = Object.entries(allUsers)
       .filter((member) => session[1].users.hasOwnProperty(member[0]))
       .map((recipient) => recipient[1]);
 
-    if (user[1].response == "accepted") {
+    if (user[1].response == UserResponses.ACCEPTED) {
       await app.client.chat.update({
         token: workspace.token,
         channel: user[1].channel,
@@ -172,7 +173,11 @@ const end = async (app, { workspace, session }) => {
         blocks: JoinMessage(
           user[1].group.meeting_link,
           recipients.filter(
-            (rec) => session[1].users[rec.id].response == "accepted"
+            (rec) =>
+              session[1].users[rec.id].response == UserResponses.ACCEPTED &&
+              session[1].users[rec.id].group &&
+              session[1].users[rec.id].group.id ==
+                (user[1].group && user[1].group.id)
           ),
           {
             message: "Don't hold back. Join others to start yapping.",
@@ -183,10 +188,10 @@ const end = async (app, { workspace, session }) => {
     }
 
     //If user didn't respond, update the links to the available calls
-    else if (user[1].response == "none") {
+    else if (user[1].response == UserResponses.MAYBE) {
       await admin
         .database()
-        .ref(`sessions/${workspace.team.id}`)
+        .ref(`sessions/${workspace.team.id}/${session[0]}`)
         .once("value", async (data) => {
           let userData;
           await admin
@@ -195,47 +200,43 @@ const end = async (app, { workspace, session }) => {
             .once("value", async (data) => {
               userData = data.val();
             });
-          const activeSessions = Object.entries(data.val());
-          const inviteLinks = activeSessions.map((session) => {
-            urls = [
-              ...new Set(
-                Object.entries(session[1].users || {}).map(
-                  (user) => user[1].group && user[1].group.meeting_link
-                )
-              ),
-            ];
-
-            return urls.map((url) => {
-              return {
-                url: url,
-                users: Object.entries(userData)
-                  .map((user) => user[1])
-                  .filter((user) => {
-                    const userFromSession = session[1].users[user.id];
-                    return (
-                      userFromSession &&
-                      userFromSession.group &&
-                      userFromSession.group.meeting_link == url
-                    );
-                  }),
-                expired: session[1].status == "ended",
-              };
-            });
+          const activeSessions = [session[0], data.val()];
+          const inviteLinks = [
+            ...new Set(
+              Object.entries(activeSessions[1].users || {})
+                .map((user) => user[1].group && user[1].group.meeting_link)
+                .filter((url) => url || false)
+            ),
+          ].map((url) => {
+            return {
+              url: url,
+              users: Object.entries(userData)
+                .map((user) => user[1])
+                .filter((user) => {
+                  const userFromSession = activeSessions[1].users[user.id];
+                  return (
+                    userFromSession &&
+                    userFromSession.group &&
+                    userFromSession.group.meeting_link == url
+                  );
+                }),
+              expired: activeSessions[1].status == SessionStatus.ENDED,
+            };
           });
-          console.log("users list", JSON.stringify(...inviteLinks));
+
           await app.client.chat.update({
             token: workspace.token,
             channel: user[1].channel,
             ts: user[1].ts,
             text: " ",
-            blocks: SessionListMessage(...inviteLinks),
+            blocks: SessionListMessage(inviteLinks),
           });
         });
     }
     await admin
       .database()
       .ref(`sessions/${workspace.team.id}/${session[0]}/status`)
-      .set("ended");
+      .set(SessionStatus.ENDED);
   }
 };
 
@@ -294,7 +295,7 @@ module.exports.RSVP = {
       .ref(
         `sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`
       )
-      .set("accepted");
+      .set(UserResponses.ACCEPTED);
   },
 
   decline: async (app, { ack, say, context, body, respond }) => {
@@ -307,7 +308,7 @@ module.exports.RSVP = {
       .ref(
         `sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`
       )
-      .set("declined");
+      .set(UserResponses.DECLINED);
   },
 };
 

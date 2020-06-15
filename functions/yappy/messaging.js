@@ -99,28 +99,29 @@ async function sendMeetingLinksToWorkspace(
                 .set({ id: meeting_group_id, meeting_link: meeting_url });
             });
         }
+      }
 
-        for (const user of userLists.maybe) {
-          const result = app.client.chat
-            .postMessage({
-              token: workspace.token,
-              text: `There are some sessions in progress you can join`,
-              channel: user.id,
-              blocks: await SessionListMessage(ongoingMeetings),
-            })
-            .then(async (res) => {
-              await admin
-                .database()
-                .ref(
-                  `sessions/${workspace.team.id}/${meetingId}/users/${user.id}`
-                )
-                .set({
-                  response: "none",
-                  ts: res.ts,
-                  channel: res.channel,
-                });
-            });
-        }
+      for (const user of userLists.maybe) {
+        console.log("ONGOING MEETING", JSON.stringify(ongoingMeetings));
+        const result = app.client.chat
+          .postMessage({
+            token: workspace.token,
+            text: `There are some sessions in progress you can join`,
+            channel: user.id,
+            blocks: await SessionListMessage(ongoingMeetings),
+          })
+          .then(async (res) => {
+            await admin
+              .database()
+              .ref(
+                `sessions/${workspace.team.id}/${meetingId}/users/${user.id}`
+              )
+              .set({
+                response: "none",
+                ts: res.ts,
+                channel: res.channel,
+              });
+          });
       }
     } else {
       console.log("workspace", workspace.team.id, "meeting", meetingId);
