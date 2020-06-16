@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const { NewSessionControls } = require("./components/new_sessions");
 const { ScheduledSessions } = require("./components/scheduled_sessions");
 const { FeedbackSection } = require("./components/feedback_section");
+const { description } = require("../strings");
 
 exports.HomeView = async (user) => {
   let userIsRegistered = await admin
@@ -19,7 +20,7 @@ exports.HomeView = async (user) => {
         actionId: "yappy_opt_out",
       }
     : {
-        text: "You can sign up by pressing the button below",
+        text: "You can sign up by pressing the button below:",
         color: "primary",
         button: "Opt in",
         actionId: "yappy_opt_in",
@@ -53,13 +54,13 @@ exports.HomeView = async (user) => {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "*Scheduled sessions*",
+          text: userIsRegistered ? "*Scheduled sessions*" : description,
         },
       },
 
       ...ScheduledSessions(loggedUser, (await scheduledSessions) || []),
       ...NewSessionControls(loggedUser),
-      ...FeedbackSection(user),
+      ...FeedbackSection(loggedUser),
 
       //Opt in / out controls
       {

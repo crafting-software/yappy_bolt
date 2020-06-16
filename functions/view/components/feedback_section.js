@@ -26,5 +26,7 @@ module.exports.FeedbackSection = (user) => {
     },
   ];
 
-  return [...template, { type: "divider" }];
+  return user
+    ? [...template, { type: "divider" }]
+    : [{ type: "section", text: { type: "plain_text", text: " " } }];
 };

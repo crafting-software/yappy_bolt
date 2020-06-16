@@ -1,13 +1,19 @@
 const { JoinMessage } = require("./join_message");
+const { JoinMessageMaybe } = require("./components/join_message_small");
 
 module.exports.SessionListMessage = (sessionList) => {
   const blocks = [];
   sessionList.forEach((session) => {
-    return blocks.push(
-      ...JoinMessage(session.url, session.users, {
+    blocks.push(
+      ...JoinMessageMaybe(session.url, session.users, {
         expired: session.expired || false,
       })
     );
+    if (sessionList.indexOf(session) < sessionList.length - 1) {
+      blocks.push({
+        type: "divider",
+      });
+    }
   });
 
   return blocks && blocks.length

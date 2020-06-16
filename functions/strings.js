@@ -17,6 +17,11 @@ const messages = [
 
 module.exports.getRandomMessage = () =>
   messages[Math.floor(Math.random() * messages.length)];
+
+module.exports.description =
+  ":wave: I'm Yappy and my job is to make sure you stay socially connected with your team while working from home. \
+  I'll be the one telling you to take a break and join your team mates in a short video call to yap about anything.";
+
 module.exports.instantYapMessage = (initiatorId) =>
   `<@${initiatorId}> invited you to an instant yap!\nThe session \
 will start ${
@@ -31,4 +36,4 @@ clicking the button below. You can manually join later if you change your mind."
 
 module.exports.adminOnboardingMessage = (params = {}) =>
   `Hi <@${params.accountId}> ! I've scheduled a session for your team at ${params.time}.\nAs a workspace admin, you can \
-schedule recurring sessions at specific hours.\nCheck my home page for more details.`;
+schedule recurring sessions at specific hours.\nFor more details, click on the *Home* tab.`;

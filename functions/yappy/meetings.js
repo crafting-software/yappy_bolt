@@ -149,6 +149,10 @@ const cancel = async (app, args) => {
 };
 
 const end = async (app, { workspace, session }) => {
+  await admin
+    .database()
+    .ref(`sessions/${workspace.team.id}/${session[0]}/status`)
+    .set(SessionStatus.ENDED);
   let allUsers;
   await admin
     .database()
@@ -223,20 +227,18 @@ const end = async (app, { workspace, session }) => {
               expired: activeSessions[1].status == SessionStatus.ENDED,
             };
           });
-
-          await app.client.chat.update({
-            token: workspace.token,
-            channel: user[1].channel,
-            ts: user[1].ts,
-            text: " ",
-            blocks: SessionListMessage(inviteLinks),
-          });
+          console.log("update message for user  @" + user[0]);
+          await app.client.chat
+            .update({
+              token: workspace.token,
+              channel: user[1].channel,
+              ts: user[1].ts,
+              text: " ",
+              blocks: SessionListMessage(inviteLinks),
+            })
+            .then((res) => console.log("result", JSON.stringify(res)));
         });
     }
-    await admin
-      .database()
-      .ref(`sessions/${workspace.team.id}/${session[0]}/status`)
-      .set(SessionStatus.ENDED);
   }
 };
 
