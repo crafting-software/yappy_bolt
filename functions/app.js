@@ -70,16 +70,6 @@ module.exports.Yappy = (expressReceiver) => {
     });
   });
 
-  app.action("yappy_message_opt_out", async (resp) => {
-    await resp.ack();
-    await app.client.chat.delete({
-      token: resp.context.botToken,
-      ts: resp.body.message.ts,
-      channel: resp.body.channel.id,
-    });
-    await optOut(app, resp);
-  });
-
   app.action("yappy_message_opt_in", async (resp) => {
     await resp.ack();
     await app.client.chat.delete({

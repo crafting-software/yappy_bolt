@@ -32,7 +32,7 @@ module.exports.yappyOnboardingMessageText = (params = {}) =>
   "Hello! Let me introduce myself.\
 I'm Yappy and my job is to make sure you stay socially connected with your team while working from home. I'll be the one telling \
 you to take a break and join your team mates in a short video call to yap about anything.\n\nYou can opt out of this activity by \
-clicking the button below. You can manually join later if you change your mind.";
+navigating to the *Home* tab and pressing *Opt out*. You can manually join later if you change your mind.";
 
 module.exports.adminOnboardingMessage = (params = {}) =>
   `Hi <@${params.accountId}> ! I've scheduled a session for your team at ${params.time}.\nAs a workspace admin, you can \
