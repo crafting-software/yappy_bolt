@@ -129,7 +129,7 @@ async function sendGroupMessage(result) {
 }
 
 async function sendPrivateMessage(resp) {
-  const userId = resp.event.user.id;
+  const userId = resp.event.user.id || resp.event.user;
   const teamId = resp.body.team_id;
   const token = resp.context.botToken;
 
@@ -166,7 +166,9 @@ async function sendPrivateMessage(resp) {
         .database()
         .ref(`users/${teamId}/${userId}`)
         .set(user)
-        .then(async (result) => await rp(postMessageRequestOptions));
+        .then((result) => {
+          rp(postMessageRequestOptions);
+        });
     } else console.log("Error processing request : " + JSON.stringify(result));
   });
 }

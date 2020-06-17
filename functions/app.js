@@ -1,4 +1,5 @@
 const functions = require("firebase-functions");
+const admin = require("firebase-admin");
 
 const { App } = require("@slack/bolt");
 const { HomeView } = require("./view/app_home");
@@ -33,6 +34,25 @@ module.exports.Yappy = (expressReceiver) => {
 
   app.event("team_join", async (resp) => {
     await onboarding.sendPrivateMessage(resp);
+  });
+
+  app.event("member_joined_channel", async (resp) => {
+    let channel;
+    await admin
+      .database()
+      .ref(`installations/${resp.body.team_id}/webhook/channel_id`)
+      .once("value", async (data) => {
+        channel = data.val();
+      });
+    await admin
+      .database()
+      .ref(`users/${resp.body.team_id}/${resp.event.user}`)
+      .once("value", async (data) => {
+        const snapshot = data.val();
+        if (channel == resp.event.channel && !snapshot)
+          //user joined the channel that integrated Yappy and it's not registered
+          await onboarding.sendPrivateMessage(resp);
+      });
   });
 
   app.event("user_change", async (resp) => {
