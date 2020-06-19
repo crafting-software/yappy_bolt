@@ -1,6 +1,6 @@
 const moment = require("moment");
 const admin = require("firebase-admin");
-const { parseTime } = require("../utils");
+const { parseTime, joinValidator } = require("../utils");
 const {
   sendMeetingLinksToWorkspace,
   sendMessagesToWorkspaces,
@@ -208,12 +208,14 @@ const end = async (app, { workspace, session }) => {
           const inviteLinks = [
             ...new Set(
               Object.entries(activeSessions[1].users || {})
-                .map((user) => user[1].group && user[1].group.meeting_link)
-                .filter((url) => url || false)
+                .map((user) => user[1].group && user[1].group.id)
+                .filter((group_id) => group_id || false)
             ),
-          ].map((url) => {
+          ].map((group_id) => {
             return {
-              url: url,
+              session_id: session[0],
+              meeting_id: group_id,
+              workspace: workspace.team.id,
               users: Object.entries(userData)
                 .map((user) => user[1])
                 .filter((user) => {
@@ -221,7 +223,7 @@ const end = async (app, { workspace, session }) => {
                   return (
                     userFromSession &&
                     userFromSession.group &&
-                    userFromSession.group.meeting_link == url
+                    userFromSession.group.id == group_id
                   );
                 }),
               expired: activeSessions[1].status == SessionStatus.ENDED,
@@ -234,7 +236,7 @@ const end = async (app, { workspace, session }) => {
               channel: user[1].channel,
               ts: user[1].ts,
               text: " ",
-              blocks: SessionListMessage(inviteLinks),
+              blocks: SessionListMessage(inviteLinks, user[0]),
             })
             .then((res) => console.log("result", JSON.stringify(res)));
         });

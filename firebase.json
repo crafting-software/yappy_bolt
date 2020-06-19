@@ -5,13 +5,13 @@
       {
         "source": "/oauth",
         "function": "oauth"
+      },
+      {
+        "source": "**",
+        "function": "web"
       }
     ],
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ]
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
   },
   "emulators": {
     "functions": {

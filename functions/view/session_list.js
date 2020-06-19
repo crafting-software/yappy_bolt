@@ -1,13 +1,23 @@
-const { JoinMessage } = require("./join_message");
+const { joinValidator } = require("../utils");
 const { JoinMessageMaybe } = require("./components/join_message_small");
 
-module.exports.SessionListMessage = (sessionList) => {
+module.exports.SessionListMessage = (sessionList, userId) => {
   const blocks = [];
   sessionList.forEach((session) => {
+    console.log("session !", JSON.stringify(session));
     blocks.push(
-      ...JoinMessageMaybe(session.url, session.users, {
-        expired: session.expired || false,
-      })
+      ...JoinMessageMaybe(
+        joinValidator(
+          userId,
+          session.workspace,
+          session.session_id,
+          session.meeting_id
+        ),
+        session.users,
+        {
+          expired: session.expired || false,
+        }
+      )
     );
     if (sessionList.indexOf(session) < sessionList.length - 1) {
       blocks.push({

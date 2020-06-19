@@ -2,7 +2,7 @@ const moment = require("moment");
 const admin = require("firebase-admin");
 const { v4 } = require("uuid");
 
-const { splitToChunks } = require("../utils");
+const { splitToChunks, joinValidator } = require("../utils");
 const { getRandomMessage, instantYapMessage } = require("../strings");
 const { getSubscribedUsers, getInstantYapUsers } = require("./users");
 const {
@@ -56,18 +56,28 @@ async function sendMeetingLinksToWorkspace(
           `https://8x8.vc/${meeting_group_id}/${workspace.team.name}`
         );
         ongoingMeetings.push({
+          meeting_id: meeting_group_id,
+          session_id: meetingId,
+          workspace: workspace.team.id,
           url: meeting_url,
           users: group,
           expired: false,
         });
 
         for (let user of group) {
+          const url = joinValidator(
+            user.id,
+            workspace.team.id,
+            meetingId,
+            meeting_group_id
+          );
+          // `https://yappy-79985.web.app/${user.id}/join/${workspace.team.id}/${meetingId}/${meeting_group_id}`;
           const result = app.client.chat
             .postMessage({
               token: workspace.token,
               channel: user.id,
               text: "Time to join your yapping meeting.",
-              blocks: JoinMessage(meeting_url, group, {
+              blocks: JoinMessage(url, group, {
                 message: "Don't hold back. Join others to start yapping.",
                 expired: false,
               }),
@@ -107,7 +117,7 @@ async function sendMeetingLinksToWorkspace(
             token: workspace.token,
             text: `There are some sessions in progress you can join`,
             channel: user.id,
-            blocks: await SessionListMessage(ongoingMeetings),
+            blocks: await SessionListMessage(ongoingMeetings, user.id),
           })
           .then(async (res) => {
             await admin

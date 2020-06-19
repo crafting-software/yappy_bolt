@@ -7,6 +7,7 @@ const { CloudFunctions } = require("./cloud_functions");
 const { ExpressReceiver } = require("@slack/bolt");
 const { sendMessagesToWorkspaces } = require("./yappy/messaging");
 const { Yappy } = require("./app");
+const { webserver } = require("./web/express_server");
 
 const expressReceiver = new ExpressReceiver({
   signingSecret: config.slack.signing_secret,
@@ -59,3 +60,5 @@ exports.test = functions.https.onRequest(async (request, response) => {
 exports.oauth = functions.https.onRequest(async (request, response) => {
   CloudFunctions.oauth(request, response);
 });
+
+exports.web = functions.https.onRequest(webserver);

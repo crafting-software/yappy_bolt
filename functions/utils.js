@@ -25,3 +25,6 @@ module.exports.parseTime = (timeString) => {
   if (validator.test(timeString))
     return timeString.split(":").map((unit) => parseInt(unit));
 };
+
+module.exports.joinValidator = (user, workspace, session, meeting) =>
+  `https://yappy-79985.web.app/${user}/join/${workspace}/${session}/${meeting}`;
