@@ -45,7 +45,15 @@ const Report = async (workspaceId) => {
   for (const session of sessions) {
     const groups = [];
     for (const group of session.groups) {
-      groups.push(...row(group.users));
+      const groupRow = row(group.users.accepted);
+      const joinedLater = group.users.joinedLater.length;
+      if (joinedLater) {
+        groupRow[0].elements.push({
+          type: "plain_text",
+          text: `+ ${joinedLater} more ${joinedLater == 1 ? "user" : "users"}`,
+        });
+      }
+      groups.push(...groupRow);
     }
     list.push(...sessionCard(groups));
     if (sessions.indexOf(session) < sessions.length - 1)

@@ -1,5 +1,6 @@
 const moment = require("moment");
 const admin = require("firebase-admin");
+const { UserResponses, SessionTypes } = require("./constants");
 
 const prepareReport = async (workspaceId) => {
   const startOfDay = moment.utc().startOf("D").unix();
@@ -21,7 +22,7 @@ const prepareReport = async (workspaceId) => {
   return sessionsSnapshot
     .filter(
       (session) =>
-        session[1].type == "scheduled session" &&
+        session[1].type == SessionTypes.SCHEDULED &&
         session[1].timestamps &&
         session[1].timestamps.ts_start >= startOfDay &&
         session[1].timestamps.ts_end <= endOfDay
@@ -46,16 +47,27 @@ const prepareReport = async (workspaceId) => {
         ts_end: session[1].timestamps && session[1].timestamps.ts_end,
         sessionId: session[0],
         groups: groupIds.map((group) => {
+          const userList = usersSnapshot
+            .filter(
+              (user) =>
+                session[1].users[user[0]] &&
+                session[1].users[user[0]].group &&
+                session[1].users[user[0]].group.id == group
+            )
+            .map((user) => user[1]);
           return {
             id: group,
-            users: usersSnapshot
-              .filter(
+            users: {
+              accepted: userList.filter(
                 (user) =>
-                  session[1].users[user[0]] &&
-                  session[1].users[user[0]].group &&
-                  session[1].users[user[0]].group.id == group
-              )
-              .map((user) => user[1]),
+                  session[1].users[user.id].response == UserResponses.ACCEPTED
+              ),
+              joinedLater: userList.filter(
+                (user) =>
+                  session[1].users[user.id].response == UserResponses.MAYBE &&
+                  session[1].users[user.id].joined
+              ),
+            },
           };
         }),
       };

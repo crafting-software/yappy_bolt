@@ -4,7 +4,6 @@ const { JoinMessageMaybe } = require("./components/join_message_small");
 module.exports.SessionListMessage = (sessionList, userId) => {
   const blocks = [];
   sessionList.forEach((session) => {
-    console.log("session !", JSON.stringify(session));
     blocks.push(
       ...JoinMessageMaybe(
         joinValidator(

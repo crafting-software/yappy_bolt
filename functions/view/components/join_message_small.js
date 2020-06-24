@@ -5,7 +5,9 @@ module.exports.JoinMessageMaybe = (meeting_url, recipients, args = {}) => {
     elements: [],
   };
 
-  for (const user of recipients) {
+  const userList = args.expired ? recipients.accepted : recipients;
+
+  for (const user of userList) {
     const userItem = [
       {
         type: "image",
@@ -15,13 +17,21 @@ module.exports.JoinMessageMaybe = (meeting_url, recipients, args = {}) => {
       {
         type: "plain_text",
         text:
-          recipients.indexOf(user) < recipients.length - 1
+          userList.indexOf(user) < userList.length - 1
             ? `${user.name},`
             : user.name,
         emoji: true,
       },
     ];
     context.elements.push(...userItem);
+  }
+  const joinedLater = recipients.joinedLater && recipients.joinedLater.length;
+  if (args.expired && joinedLater) {
+    context.elements.push({
+      type: "plain_text",
+      text: `+ ${joinedLater} more ${joinedLater == 1 ? "user" : "users"}`,
+      emoji: true,
+    });
   }
 
   const session = {

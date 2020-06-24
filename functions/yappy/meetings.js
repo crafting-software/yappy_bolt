@@ -212,33 +212,44 @@ const end = async (app, { workspace, session }) => {
                 .filter((group_id) => group_id || false)
             ),
           ].map((group_id) => {
+            const userList = Object.entries(userData)
+              .map((user) => user[1])
+              .filter((user) => {
+                const userFromSession = activeSessions[1].users[user.id];
+                return (
+                  userFromSession &&
+                  userFromSession.group &&
+                  userFromSession.group.id == group_id
+                );
+              });
             return {
               session_id: session[0],
               meeting_id: group_id,
               workspace: workspace.team.id,
-              users: Object.entries(userData)
-                .map((user) => user[1])
-                .filter((user) => {
-                  const userFromSession = activeSessions[1].users[user.id];
-                  return (
-                    userFromSession &&
-                    userFromSession.group &&
-                    userFromSession.group.id == group_id
-                  );
-                }),
+              users: {
+                accepted: userList.filter(
+                  (user) =>
+                    activeSessions[1].users[user.id].response ==
+                    UserResponses.ACCEPTED
+                ),
+                joinedLater: userList.filter(
+                  (user) =>
+                    activeSessions[1].users[user.id].response ==
+                      UserResponses.MAYBE &&
+                    activeSessions[1].users[user.id].joined
+                ),
+              },
               expired: activeSessions[1].status == SessionStatus.ENDED,
             };
           });
           console.log("update message for user  @" + user[0]);
-          await app.client.chat
-            .update({
-              token: workspace.token,
-              channel: user[1].channel,
-              ts: user[1].ts,
-              text: " ",
-              blocks: SessionListMessage(inviteLinks, user[0]),
-            })
-            .then((res) => console.log("result", JSON.stringify(res)));
+          await app.client.chat.update({
+            token: workspace.token,
+            channel: user[1].channel,
+            ts: user[1].ts,
+            text: " ",
+            blocks: SessionListMessage(inviteLinks, user[0]),
+          });
         });
     }
   }
