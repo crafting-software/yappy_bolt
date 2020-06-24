@@ -27,4 +27,9 @@ module.exports.UserResponses = {
   MAYBE: "none",
 };
 
+module.exports.WeeklyReportingTime = {
+  day: 5, //friday
+  utc_time: "14:00",
+};
+
 module.exports.GROUP_SIZE = 3;
