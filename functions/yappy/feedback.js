@@ -7,12 +7,15 @@ async function sendFeedback(app, { body, context, view, ack, payload }) {
   await ack();
   const message = view.state.values.feedback_message.feedback_input.value;
   const ts = moment.utc().unix();
-  MixpanelInstance.track("Feedback sent", {
-    message: message,
-    timestamp: ts,
-    workspace: body.team.id,
-    source: payload.private_metadata,
-  });
+  const mixpanel = MixpanelInstance({ workspace: body.team.id });
+  if (mixpanel) {
+    mixpanel.track("Feedback sent", {
+      message: message,
+      timestamp: ts,
+      workspace: body.team.id,
+      source: payload.private_metadata,
+    });
+  }
   await admin
     .database()
     .ref(`feedback/${body.team.id}/${v4()}`)

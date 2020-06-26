@@ -148,11 +148,14 @@ const cancel = async (app, args) => {
     });
   }
 
-  MixpanelInstance.track("Session cancelled", {
-    session_id: args.session[0],
-    workspace: args.workspace.team.id,
-    timestamp: moment.utc().unix(),
-  });
+  const mixpanel = MixpanelInstance({ workspace: args.workspace.team.id });
+  if (mixpanel) {
+    mixpanel.track("Session cancelled", {
+      session_id: args.session[0],
+      workspace: args.workspace.team.id,
+      timestamp: moment.utc().unix(),
+    });
+  }
 };
 
 const end = async (app, { workspace, session }) => {
@@ -168,6 +171,7 @@ const end = async (app, { workspace, session }) => {
       allUsers = data.val();
     });
   const sessionUsers = Object.entries(session[1].users || {});
+  const mixpanel = MixpanelInstance({ workspace: workspace.team.id });
 
   for (const user of sessionUsers) {
     //If user was in that conversation, remove message with join link.
@@ -175,11 +179,13 @@ const end = async (app, { workspace, session }) => {
       .filter((member) => session[1].users.hasOwnProperty(member[0]))
       .map((recipient) => recipient[1]);
 
-    MixpanelInstance.track("Session ended", {
-      type: session[1].type,
-      session_id: session[0],
-      workspace: workspace.team.id,
-    });
+    if (mixpanel) {
+      mixpanel.track("Session ended", {
+        type: session[1].type,
+        session_id: session[0],
+        workspace: workspace.team.id,
+      });
+    }
 
     if (user[1].response == UserResponses.ACCEPTED) {
       await app.client.chat.update({
@@ -282,14 +288,17 @@ const instant = async (app, { ack, body, context }) => {
     (element) => element.value.split("/")[1]
   );
 
-  MixpanelInstance.track("Created instant yap", {
-    distinct_id: `${body.user.team_id}/${body.user.id}`,
-    workspace: body.user.team_id,
-    users: [
-      `${body.user.team_id}/${body.user.id}`,
-      ...users.map((user) => `${body.user.team_id}/${user}`),
-    ],
-  });
+  const mixpanel = MixpanelInstance({ workspace: body.user.team_id });
+  if (mixpanel) {
+    mixpanel.track("Created instant yap", {
+      distinct_id: `${body.user.team_id}/${body.user.id}`,
+      workspace: body.user.team_id,
+      users: [
+        `${body.user.team_id}/${body.user.id}`,
+        ...users.map((user) => `${body.user.team_id}/${user}`),
+      ],
+    });
+  }
 
   sendMessagesToWorkspaces(app, body.team.id, {
     initiatorId: body.user.id,
@@ -335,11 +344,14 @@ module.exports.RSVP = {
       )
       .set(UserResponses.ACCEPTED);
 
-    MixpanelInstance.track("Accepted session", {
-      distinct_id: `${body.user.team_id}/${user_id}`,
-      session: meeting_request_id,
-      workspace: body.user.team_id,
-    });
+    const mixpanel = MixpanelInstance({ workspace: body.user.team_id });
+    if (mixpanel) {
+      mixpanel.track("Accepted session", {
+        distinct_id: `${body.user.team_id}/${user_id}`,
+        session: meeting_request_id,
+        workspace: body.user.team_id,
+      });
+    }
   },
 
   decline: async (app, { ack, say, context, body, respond }) => {
@@ -350,11 +362,14 @@ module.exports.RSVP = {
 
     const user_id = body.user.id;
     const team_id = body.user.team_id;
-    MixpanelInstance.track("Declined session", {
-      distinct_id: `${team_id}/${user_id}`,
-      session: meeting_request_id,
-      workspace: body.user.team_id,
-    });
+    const mixpanel = MixpanelInstance({ workspace: team_id });
+    if (mixpanel) {
+      mixpanel.track("Declined session", {
+        distinct_id: `${team_id}/${user_id}`,
+        session: meeting_request_id,
+        workspace: body.user.team_id,
+      });
+    }
     var usersRef = await admin
       .database()
       .ref(

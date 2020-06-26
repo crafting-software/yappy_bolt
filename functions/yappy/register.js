@@ -20,21 +20,24 @@ module.exports.optIn = async (app, { ack, say, context, body }) => {
   });
 
   const ts = moment.utc().unix();
+  const mixpanel = MixpanelInstance({ workspace: workspaceId });
 
-  MixpanelInstance.people.set(`${workspaceId}/${userId}`, {
-    opted_out: false,
-    timestamp: ts,
-    join_source: "Opt-in",
-    local_user_id: userId,
-    workspace: workspaceId,
-    global_id: `${workspaceId}/${userId}`,
-    $name: user.user.name,
-  });
+  if (mixpanel) {
+    mixpanel.people.set(`${workspaceId}/${userId}`, {
+      opted_out: false,
+      timestamp: ts,
+      join_source: "Opt-in",
+      local_user_id: userId,
+      workspace: workspaceId,
+      global_id: `${workspaceId}/${userId}`,
+      $name: user.user.name,
+    });
 
-  MixpanelInstance.track("Joined Yappy", {
-    distinct_id: `${workspaceId}/${userId}`,
-    timestamp: ts,
-  });
+    mixpanel.track("Joined Yappy", {
+      distinct_id: `${workspaceId}/${userId}`,
+      timestamp: ts,
+    });
+  }
 
   await admin.database().ref(`users/${workspaceId}/${userId}`).set({
     name: user.user.name,
@@ -55,6 +58,7 @@ module.exports.optOut = async (app, { ack, payload, context, body }) => {
   const workspaceId = body.team.id;
   const userId = body.user.id;
   console.log("workspace " + workspaceId);
+  const mixpanel = MixpanelInstance({ workspace: workspaceId });
 
   const token = context.botToken;
   await admin.database().ref(`users/${workspaceId}/${userId}`).remove();
@@ -66,15 +70,17 @@ module.exports.optOut = async (app, { ack, payload, context, body }) => {
   });
 
   const ts = moment.utc().unix();
-  MixpanelInstance.track("Opted out of Yappy", {
-    distinct_id: `${workspaceId}/${userId}`,
-    timestamp: ts,
-  });
+  if (mixpanel) {
+    mixpanel.track("Opted out of Yappy", {
+      distinct_id: `${workspaceId}/${userId}`,
+      timestamp: ts,
+    });
 
-  MixpanelInstance.people.set(`${workspaceId}/${userId}`, {
-    opted_out: true,
-    timestamp: ts,
-  });
+    mixpanel.people.set(`${workspaceId}/${userId}`, {
+      opted_out: true,
+      timestamp: ts,
+    });
+  }
 
   await app.client.views.open({
     token: token,

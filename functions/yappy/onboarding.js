@@ -15,6 +15,7 @@ async function sendGroupMessage(result) {
   const token = result.access_token;
   const channel = result.incoming_webhook.channel_id;
   const teamId = result.team.id;
+  const mixpanel = MixpanelInstance({ workspace: teamId });
   await admin
     .database()
     .ref(`installations/${teamId}`)
@@ -99,22 +100,24 @@ async function sendGroupMessage(result) {
                   name: name,
                 });
                 const ts = moment.utc().unix();
-                MixpanelInstance.track("Joined Yappy", {
-                  distinct_id: `${teamId}/${id}`,
-                  workspace: teamId,
-                  local_user_id: id,
-                  timestamp: ts,
-                });
+                if (mixpanel) {
+                  mixpanel.track("Joined Yappy", {
+                    distinct_id: `${teamId}/${id}`,
+                    workspace: teamId,
+                    local_user_id: id,
+                    timestamp: ts,
+                  });
 
-                MixpanelInstance.people.set(`${teamId}/${id}`, {
-                  opted_out: false,
-                  timestamp: ts,
-                  workspace: teamId,
-                  local_user_id: id,
-                  global_id: `${teamId}/${id}`,
-                  $name: user.user.name,
-                  join_source: "Onboarding - Channel integration",
-                });
+                  mixpanel.people.set(`${teamId}/${id}`, {
+                    opted_out: false,
+                    timestamp: ts,
+                    workspace: teamId,
+                    local_user_id: id,
+                    global_id: `${teamId}/${id}`,
+                    $name: user.user.name,
+                    join_source: "Onboarding - Channel integration",
+                  });
+                }
 
                 if (user.user.is_admin) {
                   rp({
@@ -150,6 +153,7 @@ async function sendPrivateMessage(resp, { joinSource }) {
   const userId = resp.event.user.id || resp.event.user;
   const teamId = resp.body.team_id;
   const token = resp.context.botToken;
+  const mixpanel = MixpanelInstance({ workspace: teamId });
 
   const userRequest = {
     uri: "https://slack.com/api/users.info",
@@ -189,19 +193,21 @@ async function sendPrivateMessage(resp, { joinSource }) {
         });
 
       const ts = moment.utc().unix();
-      MixpanelInstance.track("Joined Yappy", {
+      mixpanel.track("Joined Yappy", {
         distinct_id: `${teamId}/${userId}`,
         timestamp: ts,
       });
-      MixpanelInstance.people.set(`${teamId}/${userId}`, {
-        opted_out: false,
-        timestamp: ts,
-        local_user_id: userId,
-        global_id: `${teamId}/${userId}`,
-        workspace: teamId,
-        $name: user.name,
-        join_source: joinSource,
-      });
+      if (mixpanel) {
+        mixpanel.people.set(`${teamId}/${userId}`, {
+          opted_out: false,
+          timestamp: ts,
+          local_user_id: userId,
+          global_id: `${teamId}/${userId}`,
+          workspace: teamId,
+          $name: user.name,
+          join_source: joinSource,
+        });
+      }
     } else console.log("Error processing request : " + JSON.stringify(result));
   });
 }

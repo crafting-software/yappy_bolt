@@ -206,13 +206,17 @@ const oauth = async (request, response) => {
     .database()
     .ref(`installations/${result.team.id}`)
     .once("value", async (data) => {
-      if (!data.val())
-        MixpanelInstance.track("New workspace installed Yappy", {
-          workspace: result.team.id,
-          name: result.team.name,
-          channel: result.incoming_webhook.channel_id,
-          timestamp: moment.utc().unix(),
-        });
+      if (!data.val()) {
+        const mixpanel = MixpanelInstance({ workspace: result.team.id });
+        if (mixpanel) {
+          mixpanel.track("New workspace installed Yappy", {
+            workspace: result.team.id,
+            name: result.team.name,
+            channel: result.incoming_webhook.channel_id,
+            timestamp: moment.utc().unix(),
+          });
+        }
+      }
     });
 
   await admin
