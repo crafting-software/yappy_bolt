@@ -7,6 +7,7 @@ const { Report } = require("./view/report");
 const { Meeting } = require("./yappy/meetings");
 const { sendMessagesToWorkspaces } = require("./yappy/messaging");
 const { onboarding } = require("./yappy/onboarding");
+const { MixpanelInstance } = require("./yappy/analytics");
 const {
   Timers,
   SessionStatus,
@@ -149,11 +150,12 @@ const userPresenceTracker = async (app) => {
               currentUser = data.val();
             });
 
-          if (currentUser)
+          if (currentUser) {
             await admin
               .database()
               .ref(`users/${workspaceId}/${userId}/presence`)
               .set(status.presence);
+          }
         }
       }
     });
@@ -199,6 +201,19 @@ const oauth = async (request, response) => {
 
   console.log("Sending onboarding message");
   await onboarding.sendGroupMessage(result);
+
+  await admin
+    .database()
+    .ref(`installations/${result.team.id}`)
+    .once("value", async (data) => {
+      if (!data.val())
+        MixpanelInstance.track("New workspace installed Yappy", {
+          workspace: result.team.id,
+          name: result.team.name,
+          channel: result.incoming_webhook.channel_id,
+          timestamp: moment.utc().unix(),
+        });
+    });
 
   await admin
     .database()

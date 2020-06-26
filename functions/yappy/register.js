@@ -5,6 +5,7 @@ const { HomeView } = require("../view/app_home");
 const { FeedbackRequestMessage } = require("../view/feedback_request_message");
 const { FeedbackModal } = require("../view/feedback_modal");
 const { OptOutMessage } = require("../view/opt_out_message");
+const { MixpanelInstance } = require("./analytics");
 
 module.exports.optIn = async (app, { ack, say, context, body }) => {
   await ack();
@@ -16,6 +17,23 @@ module.exports.optIn = async (app, { ack, say, context, body }) => {
   const user = await app.client.users.info({
     token: token,
     user: userId,
+  });
+
+  const ts = moment.utc().unix();
+
+  MixpanelInstance.people.set(`${workspaceId}/${userId}`, {
+    opted_out: false,
+    timestamp: ts,
+    join_source: "Opt-in",
+    local_user_id: userId,
+    workspace: workspaceId,
+    global_id: `${workspaceId}/${userId}`,
+    $name: user.user.name,
+  });
+
+  MixpanelInstance.track("Joined Yappy", {
+    distinct_id: `${workspaceId}/${userId}`,
+    timestamp: ts,
   });
 
   await admin.database().ref(`users/${workspaceId}/${userId}`).set({
@@ -47,10 +65,21 @@ module.exports.optOut = async (app, { ack, payload, context, body }) => {
     view: await HomeView(body.user),
   });
 
+  const ts = moment.utc().unix();
+  MixpanelInstance.track("Opted out of Yappy", {
+    distinct_id: `${workspaceId}/${userId}`,
+    timestamp: ts,
+  });
+
+  MixpanelInstance.people.set(`${workspaceId}/${userId}`, {
+    opted_out: true,
+    timestamp: ts,
+  });
+
   await app.client.views.open({
     token: token,
     trigger_id: body.trigger_id,
-    view: FeedbackModal(),
+    view: FeedbackModal({ source: "opt out" }),
   });
 
   await app.client.chat.postMessage({

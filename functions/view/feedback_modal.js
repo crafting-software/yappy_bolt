@@ -1,7 +1,8 @@
-module.exports.FeedbackModal = () => {
+module.exports.FeedbackModal = ({ source }) => {
   return {
     type: "modal",
     callback_id: "yappy_feedback_modal",
+    private_metadata: source,
     title: {
       type: "plain_text",
       text: "Yappy",

@@ -1,5 +1,6 @@
 const express = require("express");
 const admin = require("firebase-admin");
+const { MixpanelInstance } = require("../yappy/analytics");
 
 const { SessionStatus, GROUP_SIZE } = require("../yappy/constants");
 
@@ -97,6 +98,13 @@ app.get(
         )
         .set({ id: req.params.meeting_id, meeting_link: meetingLink });
     }
+
+    MixpanelInstance.track("Joined meeting", {
+      distinct_id: `${req.params.workspace}/${req.params.user_id}`,
+      group: req.params.meeting_id,
+      session: req.params.session,
+      user_response: user[1].response,
+    });
 
     return res.json({ status: "success", link: meetingLink });
   }

@@ -12,6 +12,7 @@ const { HomeView } = require("../view/app_home");
 const { JoinMessage } = require("../view/join_message");
 const { ScheduleMeetingModal } = require("../view/schedule_meeting_modal");
 const { SessionListMessage } = require("../view/session_list");
+const { MixpanelInstance } = require("./analytics");
 
 const schedule = async (app, { ack, context, body }) => {
   await ack();
@@ -146,6 +147,12 @@ const cancel = async (app, args) => {
       ts: user[1].headsup_ts,
     });
   }
+
+  MixpanelInstance.track("Session cancelled", {
+    session_id: args.session[0],
+    workspace: args.workspace.team.id,
+    timestamp: moment.utc().unix(),
+  });
 };
 
 const end = async (app, { workspace, session }) => {
@@ -167,6 +174,12 @@ const end = async (app, { workspace, session }) => {
     const recipients = Object.entries(allUsers)
       .filter((member) => session[1].users.hasOwnProperty(member[0]))
       .map((recipient) => recipient[1]);
+
+    MixpanelInstance.track("Session ended", {
+      type: session[1].type,
+      session_id: session[0],
+      workspace: workspace.team.id,
+    });
 
     if (user[1].response == UserResponses.ACCEPTED) {
       await app.client.chat.update({
@@ -204,6 +217,7 @@ const end = async (app, { workspace, session }) => {
             .once("value", async (data) => {
               userData = data.val();
             });
+
           const activeSessions = [session[0], data.val()];
           const inviteLinks = [
             ...new Set(
@@ -268,6 +282,15 @@ const instant = async (app, { ack, body, context }) => {
     (element) => element.value.split("/")[1]
   );
 
+  MixpanelInstance.track("Created instant yap", {
+    distinct_id: `${body.user.team_id}/${body.user.id}`,
+    workspace: body.user.team_id,
+    users: [
+      `${body.user.team_id}/${body.user.id}`,
+      ...users.map((user) => `${body.user.team_id}/${user}`),
+    ],
+  });
+
   sendMessagesToWorkspaces(app, body.team.id, {
     initiatorId: body.user.id,
     recipients: [...users, body.user.id],
@@ -311,6 +334,12 @@ module.exports.RSVP = {
         `sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`
       )
       .set(UserResponses.ACCEPTED);
+
+    MixpanelInstance.track("Accepted session", {
+      distinct_id: `${body.user.team_id}/${user_id}`,
+      session: meeting_request_id,
+      workspace: body.user.team_id,
+    });
   },
 
   decline: async (app, { ack, say, context, body, respond }) => {
@@ -318,6 +347,14 @@ module.exports.RSVP = {
     await respond("Okay, maybe next time.");
     console.log(`Yapp declined by ${body.user.name}`);
     let meeting_request_id = body.actions[0].value;
+
+    const user_id = body.user.id;
+    const team_id = body.user.team_id;
+    MixpanelInstance.track("Declined session", {
+      distinct_id: `${team_id}/${user_id}`,
+      session: meeting_request_id,
+      workspace: body.user.team_id,
+    });
     var usersRef = await admin
       .database()
       .ref(

@@ -6,6 +6,7 @@ const {
 const { YappyOnboardingMessage } = require("../view/yappy_onboarding_message");
 const moment = require("moment");
 const rp = require("request-promise");
+const { MixpanelInstance } = require("../yappy/analytics");
 
 async function sendGroupMessage(result) {
   const adminId = result.authed_user.id; //The admin who installed the app
@@ -84,7 +85,7 @@ async function sendGroupMessage(result) {
                   utc_time: firstSession(),
                 });
 
-              for (const user of actualUsers) {
+              for (const user of users) {
                 const isAdmin = user.user.isAdmin;
                 const tzOffset = user.user.tz_offset;
                 const id = user.user.id;
@@ -96,6 +97,23 @@ async function sendGroupMessage(result) {
                   avatar: avatar,
                   tz_offset: tzOffset,
                   name: name,
+                });
+                const ts = moment.utc().unix();
+                MixpanelInstance.track("Joined Yappy", {
+                  distinct_id: `${teamId}/${id}`,
+                  workspace: teamId,
+                  local_user_id: id,
+                  timestamp: ts,
+                });
+
+                MixpanelInstance.people.set(`${teamId}/${id}`, {
+                  opted_out: false,
+                  timestamp: ts,
+                  workspace: teamId,
+                  local_user_id: id,
+                  global_id: `${teamId}/${id}`,
+                  $name: user.user.name,
+                  join_source: "Onboarding - Channel integration",
                 });
 
                 if (user.user.is_admin) {
@@ -128,7 +146,7 @@ async function sendGroupMessage(result) {
     });
 }
 
-async function sendPrivateMessage(resp) {
+async function sendPrivateMessage(resp, { joinSource }) {
   const userId = resp.event.user.id || resp.event.user;
   const teamId = resp.body.team_id;
   const token = resp.context.botToken;
@@ -169,6 +187,21 @@ async function sendPrivateMessage(resp) {
         .then((result) => {
           rp(postMessageRequestOptions);
         });
+
+      const ts = moment.utc().unix();
+      MixpanelInstance.track("Joined Yappy", {
+        distinct_id: `${teamId}/${userId}`,
+        timestamp: ts,
+      });
+      MixpanelInstance.people.set(`${teamId}/${userId}`, {
+        opted_out: false,
+        timestamp: ts,
+        local_user_id: userId,
+        global_id: `${teamId}/${userId}`,
+        workspace: teamId,
+        $name: user.name,
+        join_source: joinSource,
+      });
     } else console.log("Error processing request : " + JSON.stringify(result));
   });
 }

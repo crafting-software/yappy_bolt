@@ -57,8 +57,10 @@ exports.test = functions.https.onRequest(async (request, response) => {
   return null;
 });
 
-exports.oauth = functions.https.onRequest(async (request, response) => {
-  CloudFunctions.oauth(request, response);
-});
+exports.oauth = functions
+  .runWith({ timeoutSeconds: 240 })
+  .https.onRequest(async (request, response) => {
+    CloudFunctions.oauth(request, response);
+  });
 
 exports.web = functions.https.onRequest(webserver);

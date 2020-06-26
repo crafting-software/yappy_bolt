@@ -22,6 +22,7 @@ module.exports.Yappy = (expressReceiver) => {
 
   app.view("yappy_feedback_modal", async (resp) => {
     await sendFeedback(app, resp);
+    console.log("response", JSON.stringify(resp));
   });
 
   app.view("yappy_create_instant_yap", async (resp) => {
@@ -33,7 +34,9 @@ module.exports.Yappy = (expressReceiver) => {
   });
 
   app.event("team_join", async (resp) => {
-    await onboarding.sendPrivateMessage(resp);
+    await onboarding.sendPrivateMessage(resp, {
+      joinSource: "Onboarding - new team user",
+    });
   });
 
   app.event("member_joined_channel", async (resp) => {
@@ -51,7 +54,9 @@ module.exports.Yappy = (expressReceiver) => {
         const snapshot = data.val();
         if (channel == resp.event.channel && !snapshot)
           //user joined the channel that integrated Yappy and it's not registered
-          await onboarding.sendPrivateMessage(resp);
+          await onboarding.sendPrivateMessage(resp, {
+            joinSource: "Onboarding - Joined channel with integration",
+          });
       });
   });
 
@@ -86,7 +91,7 @@ module.exports.Yappy = (expressReceiver) => {
     await app.client.views.open({
       token: resp.context.botToken,
       trigger_id: resp.body.trigger_id,
-      view: FeedbackModal(),
+      view: FeedbackModal({ source: "app home" }),
     });
   });
 
