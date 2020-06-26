@@ -100,7 +100,7 @@ app.get(
     }
 
     const mixpanel = MixpanelInstance({ workspace: req.params.workspace });
-    if (mixpanel) {
+    if (mixpanel && !user[1].joined) {
       mixpanel.track("Joined meeting", {
         distinct_id: `${req.params.workspace}/${req.params.user_id}`,
         group: req.params.meeting_id,

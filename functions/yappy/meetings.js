@@ -173,19 +173,19 @@ const end = async (app, { workspace, session }) => {
   const sessionUsers = Object.entries(session[1].users || {});
   const mixpanel = MixpanelInstance({ workspace: workspace.team.id });
 
+  if (mixpanel) {
+    mixpanel.track("Session ended", {
+      type: session[1].type,
+      session_id: session[0],
+      workspace: workspace.team.id,
+    });
+  }
+
   for (const user of sessionUsers) {
     //If user was in that conversation, remove message with join link.
     const recipients = Object.entries(allUsers)
       .filter((member) => session[1].users.hasOwnProperty(member[0]))
       .map((recipient) => recipient[1]);
-
-    if (mixpanel) {
-      mixpanel.track("Session ended", {
-        type: session[1].type,
-        session_id: session[0],
-        workspace: workspace.team.id,
-      });
-    }
 
     if (user[1].response == UserResponses.ACCEPTED) {
       await app.client.chat.update({
