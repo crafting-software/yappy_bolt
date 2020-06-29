@@ -63,4 +63,11 @@ exports.oauth = functions
     CloudFunctions.oauth(request, response);
   });
 
+exports.eodReport = functions.pubsub
+  .schedule("00 17 * * *")
+  .timeZone("Europe/Bucharest")
+  .onRun(async (context) => {
+    CloudFunctions.eodReport(app);
+  });
+
 exports.web = functions.https.onRequest(webserver);

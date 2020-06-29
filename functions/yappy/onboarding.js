@@ -6,11 +6,11 @@ const {
 const { YappyOnboardingMessage } = require("../view/yappy_onboarding_message");
 const moment = require("moment");
 const rp = require("request-promise");
+const { getIntegratedChannelMembers } = require("./users");
 const { MixpanelInstance } = require("../yappy/analytics");
 
 async function sendGroupMessage(result) {
   const adminId = result.authed_user.id; //The admin who installed the app
-  // const teamId = result.team.id;
 
   const token = result.access_token;
   const channel = result.incoming_webhook.channel_id;
@@ -22,7 +22,6 @@ async function sendGroupMessage(result) {
     .once("value", async (data) => {
       const workspace = data.val();
       if (!workspace) {
-        //Only send channel-wide onboarding message if the workspace just registered
         const postMessageRequestOptions = {
           uri: "https://slack.com/api/chat.postMessage",
           method: "GET",
@@ -34,108 +33,83 @@ async function sendGroupMessage(result) {
             blocks: JSON.stringify(YappyOnboardingMessage),
           },
         };
+        //Only send channel-wide onboarding message if the workspace just registered
+        const users = await getIntegratedChannelMembers({
+          token: result.access_token,
+          channel: result.incoming_webhook.channel_id,
+        })
+          .then((users) => {
+            console.log("users", JSON.stringify(users));
+            const adminUser = users.find((user) => user.user.id == adminId);
+            const tzOffset = adminUser.user.tz_offset;
 
-        const getChannelUsersRequest = {
-          uri: "https://slack.com/api/conversations.members",
-          method: "GET",
-          json: true,
-          qs: {
-            token: token,
-            channel: channel,
-          },
-        };
+            const tzOffsetHours = tzOffset / 3600;
 
-        await rp(getChannelUsersRequest)
-          .then(async (result) => {
-            let actualUsers = [];
-            for (const member of await result.members) {
-              const userRequest = {
-                uri: "https://slack.com/api/users.info",
-                method: "GET",
-                json: true,
-                qs: {
-                  token: token,
-                  user: member,
-                },
-              };
-              actualUsers.push(await rp(userRequest));
-            }
-            actualUsers = await Promise.all(actualUsers).then((result) => {
-              const users = result.filter(
-                (user) =>
-                  user.user.is_bot == false && user.user.deleted == false
-              );
-              const adminUser = users.find((user) => user.user.id == adminId);
-              const tzOffset = adminUser.user.tz_offset;
+            const firstSession = (type = "utc") =>
+              moment
+                .utc()
+                .startOf("D")
+                .add(12 - (type == "local" ? 0 : tzOffsetHours), "hour")
+                .format("HH:mm");
 
-              const tzOffsetHours = tzOffset / 3600;
+            admin
+              .database()
+              .ref(`scheduled_sessions/${teamId}/${firstSession()}`)
+              .set({
+                scheduler_name: "Yappy",
+                created_at: moment.utc().unix(),
+                utc_time: firstSession(),
+              });
 
-              const firstSession = (type = "utc") =>
-                moment
-                  .utc()
-                  .startOf("D")
-                  .add(12 - (type == "local" ? 0 : tzOffsetHours), "hour")
-                  .format("HH:mm");
+            for (const user of users) {
+              const isAdmin = user.user.isAdmin;
+              const tzOffset = user.user.tz_offset;
+              const id = user.user.id;
+              const avatar = user.user.profile.image_48;
+              const name = user.user.profile.real_name;
 
-              admin
-                .database()
-                .ref(`scheduled_sessions/${teamId}/${firstSession()}`)
-                .set({
-                  scheduler_name: "Yappy",
-                  created_at: moment.utc().unix(),
-                  utc_time: firstSession(),
+              admin.database().ref(`users/${teamId}/${id}`).set({
+                id: id,
+                avatar: avatar,
+                tz_offset: tzOffset,
+                name: name,
+              });
+              const ts = moment.utc().unix();
+              if (mixpanel) {
+                mixpanel.track("Joined Yappy", {
+                  distinct_id: `${teamId}/${id}`,
+                  workspace: teamId,
+                  local_user_id: id,
+                  timestamp: ts,
                 });
 
-              for (const user of users) {
-                const isAdmin = user.user.isAdmin;
-                const tzOffset = user.user.tz_offset;
-                const id = user.user.id;
-                const avatar = user.user.profile.image_48;
-                const name = user.user.profile.real_name;
-
-                admin.database().ref(`users/${teamId}/${id}`).set({
-                  id: id,
-                  avatar: avatar,
-                  tz_offset: tzOffset,
-                  name: name,
+                mixpanel.people.set(`${teamId}/${id}`, {
+                  opted_out: false,
+                  timestamp: ts,
+                  workspace: teamId,
+                  local_user_id: id,
+                  global_id: `${teamId}/${id}`,
+                  $name: user.user.name,
+                  join_source: "Onboarding - Channel integration",
                 });
-                const ts = moment.utc().unix();
-                if (mixpanel) {
-                  mixpanel.track("Joined Yappy", {
-                    distinct_id: `${teamId}/${id}`,
-                    workspace: teamId,
-                    local_user_id: id,
-                    timestamp: ts,
-                  });
-
-                  mixpanel.people.set(`${teamId}/${id}`, {
-                    opted_out: false,
-                    timestamp: ts,
-                    workspace: teamId,
-                    local_user_id: id,
-                    global_id: `${teamId}/${id}`,
-                    $name: user.user.name,
-                    join_source: "Onboarding - Channel integration",
-                  });
-                }
-
-                if (user.user.is_admin) {
-                  rp({
-                    uri: "https://slack.com/api/chat.postMessage",
-                    method: "GET",
-                    json: true,
-                    qs: {
-                      token: token,
-                      channel: id,
-                      text: adminOnboardingMessage({
-                        accountId: id,
-                        time: firstSession("local"),
-                      }),
-                    },
-                  });
-                }
               }
-            });
+
+              if (user.user.is_admin) {
+                rp({
+                  uri: "https://slack.com/api/chat.postMessage",
+                  method: "GET",
+                  json: true,
+                  qs: {
+                    token: token,
+                    channel: id,
+                    text: adminOnboardingMessage({
+                      accountId: id,
+                      time: firstSession("local"),
+                    }),
+                  },
+                });
+              }
+            }
           })
           .then(async (result) => {
             const status = await rp(postMessageRequestOptions);

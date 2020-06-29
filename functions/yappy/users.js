@@ -1,4 +1,5 @@
 const admin = require("firebase-admin");
+const rp = require("request-promise");
 
 const getSubscribedUsers = async function (
   app,
@@ -50,4 +51,44 @@ const updateUserData = async (app, args) => {
     });
 };
 
-module.exports = { getSubscribedUsers, updateUserData, getInstantYapUsers };
+const getIntegratedChannelMembers = async (workspaceInfo) => {
+  const token = workspaceInfo.token;
+  const channel = workspaceInfo.channel;
+
+  const getChannelUsersRequest = {
+    uri: "https://slack.com/api/conversations.members",
+    method: "GET",
+    json: true,
+    qs: {
+      token: token,
+      channel: channel,
+    },
+  };
+  let actualUsers = [];
+  await rp(getChannelUsersRequest).then(async (result) => {
+    for (const member of await result.members) {
+      const userRequest = {
+        uri: "https://slack.com/api/users.info",
+        method: "GET",
+        json: true,
+        qs: {
+          token: token,
+          user: member,
+        },
+      };
+      actualUsers.push(await rp(userRequest));
+    }
+    actualUsers = await Promise.all(actualUsers).then((result) => {
+      return result.filter((user) => !user.user.is_bot && !user.user.deleted);
+    });
+  });
+
+  return actualUsers;
+};
+
+module.exports = {
+  getSubscribedUsers,
+  getIntegratedChannelMembers,
+  updateUserData,
+  getInstantYapUsers,
+};

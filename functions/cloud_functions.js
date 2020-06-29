@@ -8,6 +8,7 @@ const { Meeting } = require("./yappy/meetings");
 const { sendMessagesToWorkspaces } = require("./yappy/messaging");
 const { onboarding } = require("./yappy/onboarding");
 const { MixpanelInstance } = require("./yappy/analytics");
+const { getIntegratedChannelMembers } = require("./yappy/users");
 const {
   Timers,
   SessionStatus,
@@ -31,6 +32,30 @@ const sessionManager = (app) => {
   ref.once("value", async (data) => {
     const scheduledSessionsLists = data.val();
     for (const ws in scheduledSessionsLists) {
+      // const mixpanel = MixpanelInstance({ workspace: ws });
+      // if (mixpanel) {
+      //   mixpanel.track("Daily report sent", {
+      //     workspace_id: ws,
+      //     channel_users: await app.client.conversations
+      //       .members({
+      //         token: workspaces[ws].token,
+      //         channel: workspaces[ws].webhook.channel_id,
+      //       })
+      //       .then(
+      //         (result) =>
+      //           result.users
+      //             .map(
+      //               async (id) =>
+      //                 await app.client.users.info({
+      //                   token: workspaces[ws].token,
+      //                   user: id,
+      //                 })
+      //             )
+      //             .filter((user) => !user.user.is_bot && !user.user.is_disabled)
+      //             .length
+      //       ),
+      //   });
+      // }
       const workspaceSessions = Object.entries(scheduledSessionsLists[ws]);
       for (const session of workspaceSessions) {
         if (session[0] == utcTime) {
@@ -201,13 +226,13 @@ const oauth = async (request, response) => {
 
   console.log("Sending onboarding message");
   await onboarding.sendGroupMessage(result);
-
+  let freshInstall = true;
+  const mixpanel = MixpanelInstance({ workspace: result.team.id });
   await admin
     .database()
     .ref(`installations/${result.team.id}`)
     .once("value", async (data) => {
       if (!data.val()) {
-        const mixpanel = MixpanelInstance({ workspace: result.team.id });
         if (mixpanel) {
           mixpanel.track("New workspace installed Yappy", {
             workspace: result.team.id,
@@ -216,8 +241,14 @@ const oauth = async (request, response) => {
             timestamp: moment.utc().unix(),
           });
         }
-      }
+      } else freshInstall = false;
     });
+
+  const workspaceData = {
+    id: result.team.id,
+    token: result.access_token,
+    channel: result.incoming_webhook.channel_id,
+  };
 
   await admin
     .database()
@@ -238,6 +269,15 @@ const oauth = async (request, response) => {
           result.incoming_webhook.configuration_url.lastIndexOf("/") + 1
         ),
       },
+    })
+    .then(async (result) => {
+      const users = await getIntegratedChannelMembers(workspaceData);
+      mixpanel.track("Channel integration added", {
+        workspace_id: workspaceData.id,
+        channel_id: workspaceData.channel,
+        channel_members_count: users.length,
+        fresh_install: freshInstall,
+      });
     });
 
   console.log("A new workspace installed Yappy!");
@@ -246,4 +286,33 @@ const oauth = async (request, response) => {
     .send(302);
 };
 
-module.exports.CloudFunctions = { oauth, userPresenceTracker, sessionManager };
+const eodReport = async (app) => {
+  await admin
+    .database()
+    .ref("installations")
+    .once("value", async (data) => {
+      const workspaces = data.val();
+      for (const id in workspaces) {
+        const mixpanel = MixpanelInstance({ workspace: id });
+
+        if (mixpanel) {
+          const members = await getIntegratedChannelMembers({
+            token: workspaces[id].token,
+            channel: workspaces[id].webhook.channel_id,
+          }).then((result) => Object.entries(result));
+          mixpanel.track("End of day report", {
+            workspace_id: id,
+            channel_id: workspaces[id].webhook.channel_id,
+            channel_members_count: members.length,
+          });
+        }
+      }
+    });
+};
+
+module.exports.CloudFunctions = {
+  oauth,
+  eodReport,
+  userPresenceTracker,
+  sessionManager,
+};

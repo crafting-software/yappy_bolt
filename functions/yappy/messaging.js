@@ -5,6 +5,7 @@ const { v4 } = require("uuid");
 const { splitToChunks, joinValidator } = require("../utils");
 const { getRandomMessage, instantYapMessage } = require("../strings");
 const { getSubscribedUsers, getInstantYapUsers } = require("./users");
+const { MixpanelInstance } = require("./analytics");
 const {
   Timers,
   GROUP_SIZE,
@@ -49,6 +50,13 @@ async function sendMeetingLinksToWorkspace(
       const groups = splitToChunks(userLists.accepted, GROUP_SIZE);
       console.log("Sending meeting links to groups...");
       const ongoingMeetings = [];
+      const mixpanel = MixpanelInstance({ workspace: workspace.team.id });
+      if (mixpanel) {
+        mixpanel.track("Session started", {
+          workspace_id: workspace.team.id,
+          session_id: meetingId,
+        });
+      }
 
       for (let group of groups) {
         let meeting_group_id = v4().replace(/-/g, "");
@@ -180,6 +188,16 @@ async function sendMessagesToWorkspaces(
         const sessionType = initiatorId
           ? SessionTypes.INSTANT
           : SessionTypes.SCHEDULED;
+
+        const mixpanel = MixpanelInstance({ workspace: workspaceId });
+        if (mixpanel)
+          mixpanel.track("Session announced", {
+            type: sessionType,
+            initiator_id: initiatorId,
+            workspace: workspaceId,
+            recipients: Object.entries(users).map((user) => user[1].id),
+            session_id: meeting_request_id,
+          });
         db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/type`).set(
           sessionType
         );
