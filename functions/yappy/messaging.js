@@ -120,6 +120,12 @@ async function sendMeetingLinksToWorkspace(
       }
 
       for (const user of userLists.maybe) {
+        if (mixpanel)
+          mixpanel.track("No response", {
+            distinct_id: `${workspace.team.id}/${user.id}`,
+            session: meetingId,
+            workspace: workspace.team.id,
+          });
         const result = app.client.chat
           .postMessage({
             token: workspace.token,
