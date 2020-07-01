@@ -337,21 +337,30 @@ module.exports.RSVP = {
     console.log(`Yapp accepted by ${body.user.name}`);
     let user_id = body.user.id;
     let meeting_request_id = body.actions[0].value;
-    var usersRef = await admin
+    let session;
+    await admin
       .database()
-      .ref(
-        `sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`
-      )
-      .set(UserResponses.ACCEPTED);
+      .ref(`sessions/${body.user.team_id}/${meeting_request_id}`)
+      .once("value", async (data) => {
+        session = data.val();
+        if (session) {
+          var usersRef = await admin
+            .database()
+            .ref(
+              `sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`
+            )
+            .set(UserResponses.ACCEPTED);
 
-    const mixpanel = MixpanelInstance({ workspace: body.user.team_id });
-    if (mixpanel) {
-      mixpanel.track("Accepted session", {
-        distinct_id: `${body.user.team_id}/${user_id}`,
-        session: meeting_request_id,
-        workspace: body.user.team_id,
+          const mixpanel = MixpanelInstance({ workspace: body.user.team_id });
+          if (mixpanel) {
+            mixpanel.track("Accepted session", {
+              distinct_id: `${body.user.team_id}/${user_id}`,
+              session: meeting_request_id,
+              workspace: body.user.team_id,
+            });
+          }
+        }
       });
-    }
   },
 
   decline: async (app, { ack, say, context, body, respond }) => {
@@ -363,19 +372,30 @@ module.exports.RSVP = {
     const user_id = body.user.id;
     const team_id = body.user.team_id;
     const mixpanel = MixpanelInstance({ workspace: team_id });
-    if (mixpanel) {
-      mixpanel.track("Declined session", {
-        distinct_id: `${team_id}/${user_id}`,
-        session: meeting_request_id,
-        workspace: body.user.team_id,
-      });
-    }
-    var usersRef = await admin
+
+    let session;
+    await admin
       .database()
-      .ref(
-        `sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`
-      )
-      .set(UserResponses.DECLINED);
+      .ref(`sessions/${body.user.team_id}/${meeting_request_id}`)
+      .once("value", async (data) => {
+        session = data.val();
+      });
+
+    if (session) {
+      var usersRef = await admin
+        .database()
+        .ref(
+          `sessions/${body.user.team_id}/${meeting_request_id}/users/${body.user.id}/response`
+        )
+        .set(UserResponses.DECLINED);
+      if (mixpanel) {
+        mixpanel.track("Declined session", {
+          distinct_id: `${team_id}/${user_id}`,
+          session: meeting_request_id,
+          workspace: body.user.team_id,
+        });
+      }
+    }
   },
 };
 
