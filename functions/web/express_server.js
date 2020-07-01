@@ -35,13 +35,19 @@ app.get(
     if (!userIsRegistered)
       return res.json({
         status: "error",
-        message: "User not registered. Opt in, then try again.",
+        message: "You are not registered. Opt in to Yappy, then try again.",
       });
     if (!currentSession)
-      return res.json({ status: "error", message: "session not found" });
+      return res.json({
+        status: "error",
+        message: "Session not found.",
+      });
 
     if (currentSession.status == SessionStatus.ENDED)
-      return res.json({ status: "error", message: "session has ended" });
+      return res.json({
+        status: "error",
+        message: "This session has ended.",
+      });
 
     //find the session that the user wants to join
     const userGroups = [
@@ -78,7 +84,10 @@ app.get(
       });
     }
     if (!selectedGroup)
-      return res.json({ status: "error", message: "invalid meeting link" });
+      return res.json({
+        status: "error",
+        message: "This meeting link is invalid.",
+      });
 
     const meetingLink = encodeURI(
       `https://8x8.vc/${req.params.meeting_id}/${workspace.team.name}`
