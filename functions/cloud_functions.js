@@ -32,30 +32,6 @@ const sessionManager = (app) => {
   ref.once("value", async (data) => {
     const scheduledSessionsLists = data.val();
     for (const ws in scheduledSessionsLists) {
-      // const mixpanel = MixpanelInstance({ workspace: ws });
-      // if (mixpanel) {
-      //   mixpanel.track("Daily report sent", {
-      //     workspace_id: ws,
-      //     channel_users: await app.client.conversations
-      //       .members({
-      //         token: workspaces[ws].token,
-      //         channel: workspaces[ws].webhook.channel_id,
-      //       })
-      //       .then(
-      //         (result) =>
-      //           result.users
-      //             .map(
-      //               async (id) =>
-      //                 await app.client.users.info({
-      //                   token: workspaces[ws].token,
-      //                   user: id,
-      //                 })
-      //             )
-      //             .filter((user) => !user.user.is_bot && !user.user.is_disabled)
-      //             .length
-      //       ),
-      //   });
-      // }
       const workspaceSessions = Object.entries(scheduledSessionsLists[ws]);
       for (const session of workspaceSessions) {
         if (session[0] == utcTime) {
@@ -273,7 +249,7 @@ const oauth = async (request, response) => {
     .then(async (result) => {
       const users = await getIntegratedChannelMembers(workspaceData);
       mixpanel.track("Channel integration added", {
-        workspace_id: workspaceData.id,
+        workspace: workspaceData.id,
         channel_id: workspaceData.channel,
         channel_members_count: users.length,
         fresh_install: freshInstall,
@@ -301,7 +277,7 @@ const eodReport = async (app) => {
             channel: workspaces[id].webhook.channel_id,
           }).then((result) => Object.entries(result));
           mixpanel.track("End of day report", {
-            workspace_id: id,
+            workspace: id,
             channel_id: workspaces[id].webhook.channel_id,
             channel_members_count: members.length,
           });

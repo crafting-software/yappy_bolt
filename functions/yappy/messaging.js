@@ -17,6 +17,7 @@ const {
 const { JoinMessage } = require("../view/join_message");
 const { MessageHeadsup } = require("../view/message_heads_up");
 const { SessionListMessage } = require("../view/session_list");
+const mixpanel = require("mixpanel");
 
 async function sendMeetingLinksToWorkspace(
   app,
@@ -53,8 +54,8 @@ async function sendMeetingLinksToWorkspace(
       const mixpanel = MixpanelInstance({ workspace: workspace.team.id });
       if (mixpanel) {
         mixpanel.track("Session started", {
-          workspace_id: workspace.team.id,
-          session_id: meetingId,
+          workspace: workspace.team.id,
+          session: meetingId,
         });
       }
 
@@ -179,6 +180,11 @@ async function sendMessagesToWorkspaces(
       const ts_end =
         ts_start + (Timers.TIMEOUT + Timers.SESSION_DURATION) / 1000;
 
+      const sessionType = initiatorId
+        ? SessionTypes.INSTANT
+        : SessionTypes.SCHEDULED;
+
+      let mixpanel;
       if (users.length) {
         db.ref(
           `sessions/${workspace.team.id}/${meeting_request_id}/status`
@@ -191,18 +197,14 @@ async function sendMessagesToWorkspaces(
             ts_end: ts_end,
           });
 
-        const sessionType = initiatorId
-          ? SessionTypes.INSTANT
-          : SessionTypes.SCHEDULED;
-
-        const mixpanel = MixpanelInstance({ workspace: workspaceId });
+        mixpanel = MixpanelInstance({ workspace: workspaceId });
         if (mixpanel)
           mixpanel.track("Session announced", {
             type: sessionType,
             initiator_id: initiatorId,
             workspace: workspaceId,
             recipients: Object.entries(users).map((user) => user[1].id),
-            session_id: meeting_request_id,
+            session: meeting_request_id,
           });
         db.ref(`sessions/${workspace.team.id}/${meeting_request_id}/type`).set(
           sessionType
@@ -214,6 +216,7 @@ async function sendMessagesToWorkspaces(
       }
       for (const user of users) {
         const isInitiator = user.id == initiatorId;
+
         if (isInitiator) {
           await app.client.chat
             .postMessage({
@@ -256,6 +259,14 @@ async function sendMessagesToWorkspaces(
                 .set({ headsup_ts: message.ts, channel: userChannel });
             });
         }
+        if (mixpanel)
+          mixpanel.track("User can participate to a session", {
+            type: sessionType,
+            initiator_id: initiatorId,
+            workspace: workspaceId,
+            distinct_id: `${workspace.team.id}/${user.id}`,
+            session: meeting_request_id,
+          });
       }
     }
   });

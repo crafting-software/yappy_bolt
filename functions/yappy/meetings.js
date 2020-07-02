@@ -151,7 +151,7 @@ const cancel = async (app, args) => {
   const mixpanel = MixpanelInstance({ workspace: args.workspace.team.id });
   if (mixpanel) {
     mixpanel.track("Session cancelled", {
-      session_id: args.session[0],
+      session: args.session[0],
       workspace: args.workspace.team.id,
       timestamp: moment.utc().unix(),
     });
@@ -176,7 +176,7 @@ const end = async (app, { workspace, session }) => {
   if (mixpanel) {
     mixpanel.track("Session ended", {
       type: session[1].type,
-      session_id: session[0],
+      session: session[0],
       workspace: workspace.team.id,
     });
   }
@@ -297,6 +297,12 @@ const instant = async (app, { ack, body, context }) => {
         `${body.user.team_id}/${body.user.id}`,
         ...users.map((user) => `${body.user.team_id}/${user}`),
       ],
+    });
+
+    mixpanel.track("Accepted session", {
+      distinct_id: `${body.user.team_id}/${user_id}`,
+      session: meeting_request_id,
+      workspace: body.user.team_id,
     });
   }
 
