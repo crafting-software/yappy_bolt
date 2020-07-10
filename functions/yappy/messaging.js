@@ -218,6 +218,12 @@ async function sendMessagesToWorkspaces(
         const isInitiator = user.id == initiatorId;
 
         if (isInitiator) {
+            mixpanel.track("Accepted session", {
+              distinct_id: `${workspace.team.id}/${initiatorId}`,
+              session: meeting_request_id,
+              workspace: workspace.team.id,
+            });
+
           await app.client.chat
             .postMessage({
               token: workspace.token,

@@ -295,14 +295,8 @@ const instant = async (app, { ack, body, context }) => {
       workspace: body.user.team_id,
       users: [
         `${body.user.team_id}/${body.user.id}`,
-        ...users.map((user) => `${body.user.team_id}/${user}`),
+        ...users.map((user) => `${body.user.team_id}/${body.user.id}`),
       ],
-    });
-
-    mixpanel.track("Accepted session", {
-      distinct_id: `${body.user.team_id}/${user_id}`,
-      session: meeting_request_id,
-      workspace: body.user.team_id,
     });
   }
 
